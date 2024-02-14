@@ -16,7 +16,7 @@ def run():
 
     cursor = conn.cursor()
 
-    #TODO(antejavor): Parametrize
+    #TODO(antejavor): Parametrize the size and file name
     size = "small"
     p = Path(__file__).parents[3].joinpath(f"datasets/graph500/{size}/relationships.csv")
 

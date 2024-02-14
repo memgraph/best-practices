@@ -3,6 +3,7 @@ import mgclient
 import time
 from time import sleep
 import random
+from pathlib import Path
 
 def execute_singe_transaction_query(query, create_list, max_retries=100, initial_wait_time=0.200, backoff_factor=1.1):
     conn = mgclient.connect(host='127.0.0.1', port=7687)
@@ -42,7 +43,11 @@ def run():
         print("Connection status: %s" % conn.status)
         return
     cursor = conn.cursor()
-    FILE_PATH = "../datasets/graph500/small/graph500-scale18-ef16_adj.edges"
+    
+    #TODO(antejavor): Parametrize the size and file name
+    size = "small"
+    p = Path(__file__).parents[3].joinpath(f"datasets/graph500/{size}/graph500-scale18-ef16_adj.edges")
+    FILE_PATH = str(p)
     CHUNK_SIZE = 50000
     TOTAL_TIME = 0
     # conn.autocommit = True
