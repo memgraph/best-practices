@@ -1,0 +1,8 @@
+# Ignore files starting with "graph500" in the current directory
+graph500*
+
+# Ignore files starting with "graph500" in child directories
+**/graph500*
+
+# Ignore files ending with ".csv" in the current directory and in the child directories
+**/*.csv
