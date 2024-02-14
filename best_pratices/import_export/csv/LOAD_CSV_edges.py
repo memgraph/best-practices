@@ -1,6 +1,8 @@
 import mgclient
 from time import sleep
 import time
+import subprocess
+from pathlib import Path
 
 def run():
     conn = mgclient.connect(host='127.0.0.1', port=7687)
@@ -13,15 +15,20 @@ def run():
         return
 
     cursor = conn.cursor()
+
+    #TODO(antejavor): Parametrize
+    size = "small"
+    p = Path(__file__).parents[3].joinpath(f"datasets/graph500/{size}/relationships.csv")
+
+    #Copy the nodes.csv and relationships.csv files to the /usr/lib/memgraph/ directory
+    subprocess.run(["docker", "cp", str(p), "memgraph:/usr/lib/memgraph/relationships.csv"], check=True)
+   
+
     EDGES_FILE_PATH = "/usr/lib/memgraph/relationships.csv"
     TOTAL_TIME = 0
     conn.autocommit = True
-    # cursor.execute("DROP INDEX ON :Node(id)")
-    # cursor.execute("MATCH (n) DETACH DELETE n")
 
     sleep(1)
-
-    cursor.execute("CREATE INDEX ON :Node(id)")
 
     conn.autocommit = False
 
