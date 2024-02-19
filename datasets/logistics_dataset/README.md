@@ -128,3 +128,4 @@ Copy the obtained Cypher files onto your local file system and use [n2mg_cypherl
 ./n2mg_cypherl.sh export.cypher export.cypherl
 ```
 
+If you exported the database into separate files, then the script should be tweaked a bit. 
