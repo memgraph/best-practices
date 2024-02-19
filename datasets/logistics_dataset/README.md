@@ -130,7 +130,7 @@ Copy the obtained Cypher files onto your local file system and use [n2mg_cypherl
 
 If you exported the database into separate files, then the script should be tweaked a bit. 
 
-# How to import CYPHRL into Memgraph
+# How to import CYPHERL into Memgraph
 
 CYPHERL files can be imported using [mgconsole](https://github.com/memgraph/mgconsole?tab=readme-ov-file#export--import-into-memgraph).
 
