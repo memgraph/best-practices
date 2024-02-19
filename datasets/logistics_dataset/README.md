@@ -2,7 +2,7 @@
 
 ## 1. Copy CSV files to a running Docker container
 
-Copy all the files from the [csv folder](https://github.com/memgraph/best-practices/tree/main/datasets/logistics_dataset/100K/csv) into a Docker container where a graph db is running. 
+Copy all the files from the [csv folder](https://github.com/memgraph/best-practices/tree/main/datasets/logistics_dataset/100K/csv) into the `import` folder in the Docker container where a graph db is running. 
 
 ## 2. Create indexes
 
