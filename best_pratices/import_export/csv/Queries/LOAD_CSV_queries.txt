@@ -1,0 +1,31 @@
+LOAD CSV queries for importing the logistics dataset
+
+Create Driver nodes:
+LOAD CSV FROM "/node_driver_data.csv" WITH HEADER AS row
+CREATE (p:Driver {id: row.id, name: row.name, license_plate: row.licence_plate, status: row.status})
+
+Create Location nodes:
+LOAD CSV FROM "/node_location_data.csv" WITH HEADER AS row
+CREATE (p:Location {id: row.id, name: row.name, city: row.city, zipcode: row.zipcode});
+
+Create Order nodes:
+LOAD CSV FROM "/node_order_data.csv" WITH HEADER AS row
+CREATE (p:Order {id: row.id, status: row.status, order_id: row.order_id, product: row.product, quantity: row.quantity});
+
+Create ASSIGNED_TO edges:
+LOAD CSV FROM "/edge_assigned_to_data.csv" WITH HEADER AS row
+MATCH (p1:Order {id: row.id})
+MATCH (p2:Driver {id: row.to_id})
+CREATE (p1)-[f:ASSIGNED_TO]->(p2)
+
+Create BELONGS_TO edges:
+LOAD CSV FROM "/edge_belongs_to_data.csv" WITH HEADER AS row
+MATCH (p1:Order {id: row.id})
+MATCH (p2:Location {id: row.to_id})
+CREATE (p1)-[f:BELONGS_TO]->(p2)
+
+Create DRIVES edges:
+LOAD CSV FROM "/edge_drives_data.csv" WITH HEADER AS row
+MATCH (p1:Driver {id: row.id})
+MATCH (p2:Location {id: row.to_id})
+CREATE (p1)-[f:DRIVES]->(p2) 
