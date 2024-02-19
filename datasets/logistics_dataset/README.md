@@ -129,3 +129,17 @@ Copy the obtained Cypher files onto your local file system and use [n2mg_cypherl
 ```
 
 If you exported the database into separate files, then the script should be tweaked a bit. 
+
+# How to import CYPHRL into Memgraph
+
+CYPHERL files can be imported using [mgconsole](https://github.com/memgraph/mgconsole?tab=readme-ov-file#export--import-into-memgraph).
+
+```
+cat data.cypherl | mgconsole
+```
+
+mgconsole offers batched and parallelized import as an experimental feature as well. It's best if it's used in in-memory transactional mode without UNWINDs (only MATCH, CREATE, MERGE clauses) for now.  
+
+```
+cat data.cypherl | mgconsole --import-mode=batched-parallel
+```
