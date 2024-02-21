@@ -134,7 +134,7 @@ If you exported the database into separate Cypher files, then copy it onto your 
 ./n2mg_separate_files_cypherl.sh export.schema.cypher export.nodes.cypher export.relationships.cypher export.cleanup.cypher export.cypherl
 ```
 
-If you wish to convert separate Cypher files into separate CYPHERL files, then use:
+If you wish to convert separate Cypher files into separate CYPHERL files, then use [n2mg_separate_files_cypherls.sh](https://github.com/memgraph/memgraph/blob/master/import/n2mg_cypherl.sh) script:
 
 ```
 ./n2mg_separate_files_cypherls.sh export.schema.cypher export.nodes.cypher export.relationships.cypher export.cleanup.cypher export-schema.cypherl export-nodes.cypherl export-relationships.cypherl export-cleanup.cypherl
@@ -148,7 +148,7 @@ If you're running Memgraph with Docker, copy the CYPHERL files into the Docker c
 docker cp export.cypherl <container_id>:export.cypherl
 ```
 
-CYPHERL files can be imported using [mgconsole](https://github.com/memgraph/mgconsole?tab=readme-ov-file#export--import-into-memgraph).
+CYPHERL files can be imported using [mgconsole](https://github.com/memgraph/mgconsole?tab=readme-ov-file#export--import-into-memgraph):
 
 ```
 cat export.cypherl | mgconsole
@@ -158,13 +158,13 @@ If you converted the exported files into separate CYPHERL files, make sure to im
 
 Additional speed improvement can be achieved with the in-memory analytical storage mode, but you should be aware of its [implications](https://memgraph.com/docs/fundamentals/storage-memory-usage#implications). 
 
-The mgconsole offers batched and parallelized import as an experimental feature as well.
+The mgconsole offers batched and parallelized import as an experimental feature as well:
 
 ```
 cat export.cypherl | mgconsole --import-mode=batched-parallel
 ```
 
-If used in in-memory transactional mode, then `SerializationError` can be occur due to conflicting transactions. To avoid this, first import nodes, then relationships and make sure your queries don't update the same properties on the node or create the relationships on the same node concurrently. With this experimental feature, it is best to use only MATCH, CREATE and MERGE clauses for now (without UNWINDs).
+If used in in-memory transactional mode, then [`SerializationError`](https://memgraph.com/docs/help-center/errors/serialization) can be occur due to conflicting transactions. To avoid this, first import nodes, then relationships and make sure your queries don't update the same properties on the node or create the relationships on the same node concurrently. With this experimental feature, it is best to use only MATCH, CREATE and MERGE clauses for now (without UNWINDs).
 
 
 
