@@ -56,14 +56,21 @@ def run():
     for file in files:
         queries.append(f"LOAD CSV FROM '{file}' WITH HEADER AS row CREATE (n:Node {{id: row.id}})")
 
+    
+    res = subprocess.run(["docker", "exec", "-it", "memgraph", "grep", "^VmHWM", "/proc/1/status"], check=True, capture_output=True, text=True)
+    megabytes_peak_RSS = int(res.stdout.split()[1])/1024
+    print("Peak memory usage before processing chunks: ", megabytes_peak_RSS, " MB")
 
     start = time.time()
     with multiprocessing.Pool(10) as pool:
         results = pool.starmap(execute_single_csv_file, [(q, ) for q in queries])
         TOTAL_TIME = sum(results)
     end = time.time()
-    print("Processing chunks finished in ", end - start, " seconds")
+    print("Processing chunks finished in (wall time) ", end - start, " seconds")
 
+    res = subprocess.run(["docker", "exec", "-it", "memgraph", "grep", "^VmHWM", "/proc/1/status"], check=True, capture_output=True, text=True)
+    megabytes_peak_RSS = int(res.stdout.split()[1])/1024
+    print("Peak memory usage after processing chunks: ", megabytes_peak_RSS, " MB")
                     
     print("Total execution time: ", TOTAL_TIME)
         
