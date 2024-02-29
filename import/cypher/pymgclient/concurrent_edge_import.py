@@ -5,7 +5,7 @@ from time import sleep
 import random
 from pathlib import Path
 
-def execute_singe_transaction_query(query, create_list, max_retries=100, initial_wait_time=0.200, backoff_factor=1.1):
+def execute_chunk(query, create_list, max_retries=100, initial_wait_time=0.200, backoff_factor=1.1):
     conn = mgclient.connect(host='127.0.0.1', port=7687)
     cursor = conn.cursor()
     time_start = time.time()
@@ -28,7 +28,7 @@ def execute_singe_transaction_query(query, create_list, max_retries=100, initial
 
 def process_chunk(query, create_nodes):
     print("Processing chunk...")
-    edge_execution_time = execute_singe_transaction_query(query, create_nodes)
+    edge_execution_time = execute_chunk(query, create_nodes)
     print("Edge execution time: ", edge_execution_time)
     return edge_execution_time
 

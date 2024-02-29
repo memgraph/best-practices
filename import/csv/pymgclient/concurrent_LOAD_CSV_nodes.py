@@ -32,7 +32,10 @@ def run():
     target_nodes_directory = Path(__file__).parents[3].joinpath(f"datasets/graph500/{size}/csv_node_chunks")
     for file in target_nodes_directory.glob("*.csv"):
         subprocess.run(["docker", "cp", str(file), f"memgraph:/usr/lib/memgraph/{file.name}"], check=True)
-
+        
+    queries = []
+    for file in target_nodes_directory.glob("*.csv"):
+        queries.append(f"LOAD CSV FROM '/usr/lib/memgraph/{file.name}' WITH HEADER AS row CREATE (n:Node {{id: row.id}})")
    
     cursor = conn.cursor()
 
@@ -51,19 +54,23 @@ def run():
 
 
     print("Starting processing different csv files...")
-    files = [f"/usr/lib/memgraph/nodes_{i}.csv" for i in range(0, 10)]
-    queries = []
-    for file in files:
-        queries.append(f"LOAD CSV FROM '{file}' WITH HEADER AS row CREATE (n:Node {{id: row.id}})")
 
+
+    
+    res = subprocess.run(["docker", "exec", "-it", "memgraph", "grep", "^VmHWM", "/proc/1/status"], check=True, capture_output=True, text=True)
+    megabytes_peak_RSS = int(res.stdout.split()[1])/1024
+    print("Peak memory usage before processing chunks: ", megabytes_peak_RSS, " MB")
 
     start = time.time()
     with multiprocessing.Pool(10) as pool:
         results = pool.starmap(execute_single_csv_file, [(q, ) for q in queries])
         TOTAL_TIME = sum(results)
     end = time.time()
-    print("Processing chunks finished in ", end - start, " seconds")
+    print("Processing chunks finished in (wall time) ", end - start, " seconds")
 
+    res = subprocess.run(["docker", "exec", "-it", "memgraph", "grep", "^VmHWM", "/proc/1/status"], check=True, capture_output=True, text=True)
+    megabytes_peak_RSS = int(res.stdout.split()[1])/1024
+    print("Peak memory usage after processing chunks: ", megabytes_peak_RSS, " MB")
                     
     print("Total execution time: ", TOTAL_TIME)
         
