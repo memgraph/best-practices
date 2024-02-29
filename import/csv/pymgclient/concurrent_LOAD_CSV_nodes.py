@@ -32,7 +32,10 @@ def run():
     target_nodes_directory = Path(__file__).parents[3].joinpath(f"datasets/graph500/{size}/csv_node_chunks")
     for file in target_nodes_directory.glob("*.csv"):
         subprocess.run(["docker", "cp", str(file), f"memgraph:/usr/lib/memgraph/{file.name}"], check=True)
-
+        
+    queries = []
+    for file in target_nodes_directory.glob("*.csv"):
+        queries.append(f"LOAD CSV FROM '/usr/lib/memgraph/{file.name}' WITH HEADER AS row CREATE (n:Node {{id: row.id}})")
    
     cursor = conn.cursor()
 
@@ -51,10 +54,7 @@ def run():
 
 
     print("Starting processing different csv files...")
-    files = [f"/usr/lib/memgraph/nodes_{i}.csv" for i in range(0, 10)]
-    queries = []
-    for file in files:
-        queries.append(f"LOAD CSV FROM '{file}' WITH HEADER AS row CREATE (n:Node {{id: row.id}})")
+
 
     
     res = subprocess.run(["docker", "exec", "-it", "memgraph", "grep", "^VmHWM", "/proc/1/status"], check=True, capture_output=True, text=True)
