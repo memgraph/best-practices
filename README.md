@@ -1,6 +1,6 @@
 # Memgraph Best Practices
 
-This repository holds various examples to ease the use of Memgraph. It will be covering various topics important for any Memgraph user.
+This repository holds examples to ease the use of Memgraph. It will be covering various topics important for any Memgraph user.
 
 ## Content
 
