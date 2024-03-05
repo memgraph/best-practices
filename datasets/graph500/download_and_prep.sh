@@ -47,3 +47,15 @@ else
     rm readme.html
 fi
 
+cd ..
+
+echo "Running node extraction script..."
+python3 node_extraction.py "$size"
+
+
+echo "Running csv conversion script..."
+python3 csv_converter.py "$size"
+
+
+echo "Running csv splitter script..."
+python3 csv_splitter.py "$size"
