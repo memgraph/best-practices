@@ -4,25 +4,28 @@ import subprocess
 from time import sleep
 from pathlib import Path
 from neo4j import GraphDatabase
+import sys
 
 def process_chunk(query, create_list):
-    print("Processing chunk...")
-    node_chunk_execution_time = 0
-    time_start = time.time()
-    driver = GraphDatabase.driver("bolt://localhost:7687", auth=("", ""))
-    with driver.session() as session:
-        session.run(query, {"batch": create_list})
-    time_end = time.time()
-    node_chunk_execution_time = time_end - time_start
-    print("Node chunk execution time: ", node_chunk_execution_time)
-    return node_chunk_execution_time
+    try: 
+        driver = GraphDatabase.driver("bolt://localhost:7687", auth=("", ""))
+        with driver.session() as session:
+            session.run(query, {"batch": create_list})
+        driver.close()
+    except Exception as e:
+        print("Failed to execute chunk: ", e)
+        raise e
 
-def run():
+def run(size: str):
 
-    size = "small"
-    p = Path(__file__).parents[3].joinpath(f"datasets/graph500/{size}/graph500-scale18-ef16_adj.edges")
-    FILE_PATH = str(p)
     CHUNK_SIZE = 10000
+    FILE_PATH = ""
+
+    p = Path(__file__).parents[3].joinpath(f"datasets/graph500/{size}")
+    for file in Path(p).iterdir():
+        if file.name.endswith(".nodes"):
+            FILE_PATH = str(file)
+            break
 
     driver = GraphDatabase.driver("bolt://localhost:7687", auth=("", ""))
 
@@ -40,50 +43,45 @@ def run():
     CREATE (n:Node {id:node.id})
     """
 
+    chunks = []
     with open(FILE_PATH, "r") as file:
-        iteration = 0
         create_nodes = []
-        nodes_set = set()
-        chunks = []
         while True:
             line = file.readline()
             if not line:
                 if len(create_nodes) > 0:
                     chunks.append(create_nodes)
+                    print("Adding last chunk ...", len(create_nodes))
                     create_nodes = []
                 break
             else:
-                iteration += 1
-
-                node_sink, node_source = line.strip().split()  
-                if node_source not in nodes_set:
-                    create_nodes.append({"id": int(node_source)})
-                    nodes_set.add(node_source)
-                if node_sink not in nodes_set:
-                    create_nodes.append({"id": int(node_sink)})
-                    nodes_set.add(node_sink)
-
+                node_id = line.strip()
+                create_nodes.append({"id": int(node_id)})
                 if len(create_nodes) == CHUNK_SIZE:
-                    print("Chunk size reached - adding to chunks ...", len(nodes_set))
+                    print("Chunk size reached - adding to chunks ...", len(create_nodes))
                     chunks.append(create_nodes)
                     create_nodes = []
-
+            
         res = subprocess.run(["docker", "exec", "-it", "memgraph", "grep", "^VmHWM", "/proc/1/status"], check=True, capture_output=True, text=True)
-        megabytes_peak_RSS = int(res.stdout.split()[1])/1024
+        megabytes_peak_RSS = round(int(res.stdout.split()[1])/1024, 2)
         print("Peak memory usage before processing chunks: ", megabytes_peak_RSS, " MB")
-
 
         print("Starting processing chunks...")
         start = time.time()
         with multiprocessing.Pool(10) as pool:
-            results = pool.starmap(process_chunk, [(query, chunk) for chunk in chunks])
-            TOTAL_TIME = sum(results)
+            pool.starmap(process_chunk, [(query, chunk) for chunk in chunks])
         end = time.time()
         print("Processing chunks finished in (wall time) ", end - start, " seconds")
         
         res = subprocess.run(["docker", "exec", "-it", "memgraph", "grep", "^VmHWM", "/proc/1/status"], check=True, capture_output=True, text=True)
-        megabytes_peak_RSS = int(res.stdout.split()[1])/1024
+        megabytes_peak_RSS = round(int(res.stdout.split()[1])/1024, 2)
         print("Peak memory usage after processing chunks: ", megabytes_peak_RSS, " MB")
 
 if __name__ == "__main__":
-    run()
+    if len(sys.argv) != 2:
+        print("Usage: python concurrent_node_import.py <size>")
+        sys.exit(1)
+    else:
+        size = sys.argv[1]
+        print(f"Running with size: {size}")
+        run(size=size)

@@ -5,8 +5,6 @@ import sys
 from time import sleep
 from pathlib import Path
 
-class Sizes:
-    OPTIONS = ["small", "medium", "large"]
 
 def process_chunk(query, create_list):
     try: 
@@ -24,6 +22,12 @@ def run(size: str):
 
     CHUNK_SIZE = 10000
     FILE_PATH = ""
+
+    p = Path(__file__).parents[3].joinpath(f"datasets/graph500/{size}")
+    for file in Path(p).iterdir():
+        if file.name.endswith(".nodes"):
+            FILE_PATH = str(file)
+            break
      
     conn = mgclient.connect(host='127.0.0.1', port=7687)
     sleep(1)
@@ -34,12 +38,6 @@ def run(size: str):
         print("Connection status: %s" % conn.status)
         return
     cursor = conn.cursor()
-
-    p = Path(__file__).parents[3].joinpath(f"datasets/graph500/{size}")
-    for file in Path(p).iterdir():
-        if file.name.endswith(".nodes"):
-            FILE_PATH = str(file)
-            break
 
     
     conn.autocommit = True
@@ -59,7 +57,6 @@ def run(size: str):
 
     chunks = []
     with open(FILE_PATH, "r") as file:
-        iteration = 0
         create_nodes = []
         while True:
             line = file.readline()
@@ -78,6 +75,10 @@ def run(size: str):
                     chunks.append(create_nodes)
                     create_nodes = []
 
+    memory = subprocess.run(["docker", "exec", "-it", "memgraph", "grep", "^VmHWM", "/proc/1/status"], check=True, capture_output=True, text=True)
+    megabytes_peak_RSS = round(int(res.stdout.split()[1])/1024, 2)
+    print("Peak memory usage before processing chunks: ", megabytes_peak_RSS, " MB")
+
 
     print("Starting processing chunks...")
     start = time.time()
@@ -85,6 +86,10 @@ def run(size: str):
         pool.starmap(process_chunk, [(query, chunk) for chunk in chunks])
     end = time.time()
     print("Processing chunks finished in ", end - start, " seconds")
+
+    memory = subprocess.run(["docker", "exec", "-it", "memgraph", "grep", "^VmHWM", "/proc/1/status"], check=True, capture_output=True, text=True)
+    megabytes_peak_RSS = round(int(res.stdout.split()[1])/1024, 2)
+    print("Peak memory usage after processing chunks: ", megabytes_peak_RSS, " MB")
 
 
 if __name__ == "__main__":
