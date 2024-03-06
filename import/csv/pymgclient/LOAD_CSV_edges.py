@@ -5,6 +5,9 @@ import subprocess
 from pathlib import Path
 import sys
 
+HOST="127.0.0.1"
+PORT=7687
+
 def run(size: str):
 
     p = Path(__file__).parents[3].joinpath(f"datasets/graph500/{size}/relationships.csv")
@@ -13,7 +16,7 @@ def run(size: str):
    
     EDGES_FILE_PATH = "/usr/lib/memgraph/relationships.csv"
 
-    conn = mgclient.connect(host='127.0.0.1', port=7687)
+    conn = mgclient.connect(host=HOST, port=PORT)
     sleep(1)
 
     if conn.status is mgclient.CONN_STATUS_READY:

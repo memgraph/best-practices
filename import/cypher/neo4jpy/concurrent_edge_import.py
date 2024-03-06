@@ -8,16 +8,18 @@ from neo4j.exceptions import TransientError
 import random
 import sys
 
+HOST_PORT = "bolt://localhost:7687"
+
 #Option 1
 def process_chunk_managed_API(query, create_list):
-    driver = GraphDatabase.driver("bolt://localhost:7687", auth=("", ""))
+    driver = GraphDatabase.driver(HOST_PORT, auth=("", ""))
     with driver.session(max_transaction_retry_time=180.0, initial_retry_delay=0.2, retry_delay_multiplier=1.1, retry_delay_jitter_factor=0.1) as session:
         session.execute_write(lambda tx: tx.run(query, {"batch": create_list}))
     driver.close()
 
 #Option 2
 def process_chunk(query, create_list, max_retries=100, initial_wait_time=0.200, backoff_factor=1.1, jitter=0.1):
-    session = GraphDatabase.driver("bolt://localhost:7687", auth=("", "")).session()
+    session = GraphDatabase.driver(HOST_PORT, auth=("", "")).session()
     for attempt in range(max_retries):
         try:
             with session.begin_transaction() as tx:

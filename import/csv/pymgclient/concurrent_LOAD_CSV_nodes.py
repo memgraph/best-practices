@@ -6,10 +6,12 @@ import multiprocessing
 from pathlib import Path
 import sys
 
+HOST="127.0.0.1"
+PORT=7687
 
 def execute_csv_chunk(query):
     try:
-        conn = mgclient.connect(host='127.0.0.1', port=7687)
+        conn = mgclient.connect(host=HOST, port=PORT)
         cursor = conn.cursor()
         cursor.execute(query)
         conn.commit()
@@ -30,7 +32,7 @@ def run(size : str):
         queries.append(f"LOAD CSV FROM '/usr/lib/memgraph/{file.name}' WITH HEADER AS row CREATE (n:Node {{id: row.id}})")
    
 
-    conn = mgclient.connect(host='127.0.0.1', port=7687)
+    conn = mgclient.connect(host=HOST, port=PORT)
     
     sleep(1)
 

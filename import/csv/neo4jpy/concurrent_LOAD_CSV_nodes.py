@@ -6,10 +6,11 @@ import multiprocessing
 from pathlib import Path
 import sys
 
+HOST_PORT = "bolt://localhost:7687"
 
 def execute_csv_chunk(query):
     try:
-        driver = GraphDatabase.driver("bolt://localhost:7687", auth=("", ""))
+        driver = GraphDatabase.driver(HOST_PORT, auth=("", ""))
         with driver.session() as session:
             session.run(query)
     except:
@@ -29,7 +30,7 @@ def run(size: str):
         queries.append(f"LOAD CSV FROM '/usr/lib/memgraph/{file.name}' WITH HEADER AS row CREATE (n:Node {{id: row.id}})")
     
 
-    driver = GraphDatabase.driver("bolt://localhost:7687", auth=("", ""))
+    driver = GraphDatabase.driver(HOST_PORT, auth=("", ""))
 
     with driver.session() as session:
         session.run("DROP INDEX ON :Node(id)")

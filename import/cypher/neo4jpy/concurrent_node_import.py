@@ -6,9 +6,11 @@ from pathlib import Path
 from neo4j import GraphDatabase
 import sys
 
+HOST_PORT = "bolt://localhost:7687"
+
 def process_chunk(query, create_list):
     try: 
-        driver = GraphDatabase.driver("bolt://localhost:7687", auth=("", ""))
+        driver = GraphDatabase.driver(HOST_PORT, auth=("", ""))
         with driver.session() as session:
             session.run(query, {"batch": create_list})
         driver.close()
@@ -27,7 +29,7 @@ def run(size: str):
             FILE_PATH = str(file)
             break
 
-    driver = GraphDatabase.driver("bolt://localhost:7687", auth=("", ""))
+    driver = GraphDatabase.driver(HOST_PORT, auth=("", ""))
 
     with driver.session() as session:
         session.run("DROP INDEX ON :Node(id)")

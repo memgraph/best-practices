@@ -6,10 +6,12 @@ from time import sleep
 from pathlib import Path
 import subprocess
 
+HOST="127.0.0.1"
+PORT=7687
 
 def process_chunk(query, create_list):
     try: 
-        conn = mgclient.connect(host='127.0.0.1', port=7687)
+        conn = mgclient.connect(host=HOST, port=PORT)
         cursor = conn.cursor()
         cursor.execute(query, {"batch": create_list})
         conn.commit()
@@ -30,7 +32,7 @@ def run(size: str):
             FILE_PATH = str(file)
             break
      
-    conn = mgclient.connect(host='127.0.0.1', port=7687)
+    conn = mgclient.connect(host=HOST, port=PORT)
     sleep(1)
 
     if conn.status is mgclient.CONN_STATUS_READY:

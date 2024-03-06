@@ -5,6 +5,8 @@ import subprocess
 from pathlib import Path
 import sys
 
+HOST="127.0.0.1"
+PORT=7687
 
 def run(size: str):
 
@@ -15,7 +17,7 @@ def run(size: str):
 
     FILE_PATH = "/usr/lib/memgraph/nodes.csv"
         
-    conn = mgclient.connect(host='127.0.0.1', port=7687)
+    conn = mgclient.connect(host=HOST, port=PORT)
     sleep(1)
 
     if conn.status is mgclient.CONN_STATUS_READY:
@@ -53,7 +55,6 @@ def run(size: str):
     megabytes_peak_RSS = round(int(memory.stdout.split()[1])/1024, 2)
     print("Peak memory usage after processing chunks: ", megabytes_peak_RSS, " MB")
         
-    
 
 
 

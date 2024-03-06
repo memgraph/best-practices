@@ -7,8 +7,11 @@ import random
 import sys
 from pathlib import Path
 
+HOST="127.0.0.1"
+PORT=7687
+
 def process_chunk(query, create_list, max_retries=100, initial_wait_time=0.200, backoff_factor=1.1, jitter=0.1):
-    conn = mgclient.connect(host='127.0.0.1', port=7687)
+    conn = mgclient.connect(host=HOST, port=PORT)
     cursor = conn.cursor()
     for attempt in range(max_retries):
         try:

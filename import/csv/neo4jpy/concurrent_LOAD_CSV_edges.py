@@ -7,10 +7,11 @@ import multiprocessing
 from pathlib import Path
 import sys
 
+HOST_PORT = "bolt://localhost:7687"
 
 def execute_csv_chunk(query):
     try: 
-        driver = GraphDatabase.driver("bolt://localhost:7687", auth=("", ""))
+        driver = GraphDatabase.driver(HOST_PORT, auth=("", ""))
         with driver.session() as session:
             session.run(query)
         driver.close()
