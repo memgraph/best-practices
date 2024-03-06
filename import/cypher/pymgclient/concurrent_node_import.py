@@ -4,6 +4,7 @@ import time
 import sys
 from time import sleep
 from pathlib import Path
+import subprocess
 
 
 def process_chunk(query, create_list):
@@ -63,11 +64,10 @@ def run(size: str):
             if not line:
                 if len(create_nodes) > 0:
                     chunks.append(create_nodes)
-                    print("Adding last chunk ...", len(create_nodes)
+                    print("Adding last chunk ...", len(create_nodes))
                     create_nodes = []
                 break
             else:
-                iteration += 1
                 node_id = line.strip()
                 create_nodes.append({"id": int(node_id)})
                 if len(create_nodes) == CHUNK_SIZE:
@@ -76,7 +76,7 @@ def run(size: str):
                     create_nodes = []
 
     memory = subprocess.run(["docker", "exec", "-it", "memgraph", "grep", "^VmHWM", "/proc/1/status"], check=True, capture_output=True, text=True)
-    megabytes_peak_RSS = round(int(res.stdout.split()[1])/1024, 2)
+    megabytes_peak_RSS = round(int(memory.stdout.split()[1])/1024, 2)
     print("Peak memory usage before processing chunks: ", megabytes_peak_RSS, " MB")
 
 
@@ -88,7 +88,7 @@ def run(size: str):
     print("Processing chunks finished in ", end - start, " seconds")
 
     memory = subprocess.run(["docker", "exec", "-it", "memgraph", "grep", "^VmHWM", "/proc/1/status"], check=True, capture_output=True, text=True)
-    megabytes_peak_RSS = round(int(res.stdout.split()[1])/1024, 2)
+    megabytes_peak_RSS = round(int(memory.stdout.split()[1])/1024, 2)
     print("Peak memory usage after processing chunks: ", megabytes_peak_RSS, " MB")
 
 
