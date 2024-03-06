@@ -1,3 +1,5 @@
+# Import Cypher queries into Memgraph
+
 Cypher queries that are being imported in Memgraph can be generated dynamically in your code, similar to how it's done in the examples in the [`neo4jpy`](./neo4jpy/) and [`pymgclient`](./pymgclient/) folders with the [`graph500`](../../datasets/graph500/) dataset. 
 
 Suppose you are using a database that allows you to [export data into Cypher queries](#how-to-export-data-from-another-graph-db-into-cypher-queries). In that case, you don't have to generate Cypher queries dynamically, but you can [import them directly into Memgraph](#how-to-import-cypherl-into-memgraph). 
@@ -6,15 +8,15 @@ For the **best import speed** of large datasets, export the data into [separate 
 
 The most **straightforward approach**, not suitable for large scale, is to export data into one Cypher file and [import it into Memgraph](#how-to-import-cypherl-into-memgraph) via mgconsole or Memgraph Lab. 
 
-# How to export data from another graph db into Cypher queries
+## How to export data from another graph db into Cypher queries
 
 When exporting data from another graph db into Cypher queries, use `plain` format, which exports plain Cypher without `begin`, `commit` or `await` commands. 
 
-## Export with optimizations (`UNWIND`s)
+### Export with optimizations (`UNWIND`s)
 
 This is the default behavior regarding optimizations. Exports the file by batching with the `UNWIND` method.
 
-### Export into one file
+#### Export into one file
 
 ```
 CALL apoc.export.cypher.all("export.cypher", {
@@ -25,7 +27,7 @@ CALL apoc.export.cypher.all("export.cypher", {
 
 To import Cypher file into Memgraph, first [convert it](#how-to-convert-cypher-files-into-memgraph-cypherl).
 
-### Export into separate files
+#### Export into separate files
 ```
 CALL apoc.export.cypher.all("export.cypher", {
     format: "plain",
@@ -36,10 +38,10 @@ CALL apoc.export.cypher.all("export.cypher", {
 
 The above code generates `export.schema.cypher`, `export.nodes.cypher`, `export.relationships.cypher` and `export.cleanup.cypher` in the `import` folder. To import Cypher files into Memgraph, first [convert them](#how-to-convert-cypher-files-into-memgraph-cypherl).
 
-## Export without optimizations (without `UNDWIND`s)
+### Export without optimizations (without `UNDWIND`s)
 When `useOptimizations` is set to NONE, only `CREATE` statements will be used. 
 
-### Export into one file
+#### Export into one file
 
 ```
 CALL apoc.export.cypher.all("export.cypher", {
@@ -49,7 +51,7 @@ CALL apoc.export.cypher.all("export.cypher", {
 ```
 To import Cypher file into Memgraph, first [convert it](#how-to-convert-cypher-files-into-memgraph-cypherl).
 
-### Export into separate files
+#### Export into separate files
 
 ```
 CALL apoc.export.cypher.all("export.cypher", {
@@ -61,7 +63,7 @@ CALL apoc.export.cypher.all("export.cypher", {
 
 The above code generates `export.schema.cypher`, `export.nodes.cypher`, `export.relationships.cypher` and `export.cleanup.cypher` in the `import` folder. To import Cypher files into Memgraph, first [convert them](#how-to-convert-cypher-files-into-memgraph-cypherl).
 
-# How to convert Cypher files into Memgraph CYPHERL
+## How to convert Cypher files into Memgraph CYPHERL
 
 If you exported the database into **one Cypher file**, then copy it onto your local file system and use [n2mg_cypherl.sh](https://github.com/memgraph/memgraph/blob/master/import/n2mg_cypherl.sh) script to convert the Cypher file into `CYPHERL file:
 
@@ -81,7 +83,7 @@ If you wish to convert **separate Cypher files into separate CYPHERL files**, th
 ./n2mg_separate_files_cypherls.sh export.schema.cypher export.nodes.cypher export.relationships.cypher export.cleanup.cypher export-schema.cypherl export-nodes.cypherl export-relationships.cypherl export-cleanup.cypherl
 ```
 
-# How to import CYPHERL into Memgraph
+## How to import CYPHERL into Memgraph
 
 There are a couple of approaches to importing CYPHERL into Memgraph:
 1. [via mgconsole](https://github.com/memgraph/mgconsole?tab=readme-ov-file#export--import-into-memgraph)
