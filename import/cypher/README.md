@@ -89,6 +89,8 @@ There are a couple of approaches to importing CYPHERL into Memgraph:
 1. [via mgconsole](https://github.com/memgraph/mgconsole?tab=readme-ov-file#export--import-into-memgraph)
 2. [via Memgraph Lab](https://memgraph.com/docs/data-migration/csv#csv-file-import-in-memgraph-lab)
 3. via driver
+    - [neo4j driver](./neo4jpy/)
+    - [pymgclient](./pymgclient/)
 
 
 To import via mgconsole or driver, copy the CYPHERL file(s) into the Docker container where Memgraph is running:
