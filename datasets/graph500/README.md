@@ -1,6 +1,6 @@
 ## Getting the dataset
 
-In order to get a dataset locally on your machine, you need to run the `download_and_prep.sh` script with the `size` argument. Here is an example: 
+In order to get a dataset locally on your machine, you need to run the `download_and_prep.sh` script with the `size` argument. Here is an example of downloading the dataset from the root folder: 
 
 ```bash
 cd datasets/graph500/ 
