@@ -71,13 +71,13 @@ If you exported the database into **one Cypher file**, then copy it onto your lo
 ./n2mg_cypherl.sh export.cypher export.cypherl
 ```
 
-If you exported the database into **separate Cypher files**, then copy it onto your local file system and use [n2mg_separate_files_cypherl.sh](https://github.com/memgraph/memgraph/blob/master/import/n2mg_cypherl.sh) script to convert the Cypher files into CYPHERL file:
+If you exported the database into **separate Cypher files**, then copy it onto your local file system and use [n2mg_separate_files_cypherl.sh](https://github.com/memgraph/memgraph/blob/master/import/n2mg_separate_files_cypherl.sh) script to convert the Cypher files into CYPHERL file:
 
 ```
 ./n2mg_separate_files_cypherl.sh export.schema.cypher export.nodes.cypher export.relationships.cypher export.cleanup.cypher export.cypherl
 ```
 
-If you wish to convert **separate Cypher files into separate CYPHERL files**, then use [n2mg_separate_files_cypherls.sh](https://github.com/memgraph/memgraph/blob/master/import/n2mg_cypherl.sh) script:
+If you wish to convert **separate Cypher files into separate CYPHERL files**, then use [n2mg_separate_files_cypherls.sh](https://github.com/memgraph/memgraph/blob/master/import/n2mg_separate_files_cypherls.sh) script:
 
 ```
 ./n2mg_separate_files_cypherls.sh export.schema.cypher export.nodes.cypher export.relationships.cypher export.cleanup.cypher export-schema.cypherl export-nodes.cypherl export-relationships.cypherl export-cleanup.cypherl
