@@ -1,6 +1,17 @@
-# Memgraph Best Practices
+<h1 align="center"> Memgraph Best Practices </h1>
 
+<p align="center">
+  <a href="https://memgr.ph/join-discord">
+    <img src="https://img.shields.io/badge/Discord-7289DA?style=for-the-badge&logo=discord&logoColor=white" alt="Discord"/>
+  </a>
+  <a href="https://memgraph.com/docs/" alt="Documentation">
+    <img src="https://img.shields.io/badge/Docs-fb6d00?style=for-the-badge" alt="Documentation"/>
+  </a>
+</p>
+
+<p align="center">
 This repository holds examples to ease the use of Memgraph. It will be covering various topics important for any Memgraph user.
+</p>
 
 ## Content
 
