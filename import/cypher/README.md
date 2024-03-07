@@ -65,7 +65,7 @@ The above code generates `export.schema.cypher`, `export.nodes.cypher`, `export.
 
 ## How to convert Cypher files into Memgraph CYPHERL
 
-If you exported the database into **one Cypher file**, then copy it onto your local file system and use [n2mg_cypherl.sh](https://github.com/memgraph/memgraph/blob/master/import/n2mg_cypherl.sh) script to convert the Cypher file into `CYPHERL file:
+If you exported the database into **one Cypher file**, then copy it onto your local file system and use [n2mg_cypherl.sh](https://github.com/memgraph/memgraph/blob/master/import/n2mg_cypherl.sh) script to convert the Cypher file into CYPHERL file:
 
 ```
 ./n2mg_cypherl.sh export.cypher export.cypherl
