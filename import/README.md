@@ -53,7 +53,6 @@ TEST 2: pymgclient
 Edges per second = e/s
 Peak memory pressure in megabytes = MB 
 
-Not possible = N/A
 
 TEST 1: neo4j
 
