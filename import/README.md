@@ -5,7 +5,9 @@ In this directory, you'll find the best strategies for importing CSV and Cypher 
 The cypher and csv folders contain examples of how to load a CYPHERL file and run LOAD CSV via `pymgclient` and `neo4j` Python clients. 
 
 Before running any import script, make sure the `../dataset/graph500/download_dataset.sh` is [executed first](../datasets/graph500/README.md), 
-It will pull all necessary data into the dataset directory needed to run the tests. 
+It will pull all necessary data into the dataset directory needed to run the tests.
+
+Dataset details are explained in the [graph500 dataset README](../datasets/graph500/README.md). 
 
 If you are running a test, for example, the node import process in pymgclient, you need to pass the dataset size: 
 
