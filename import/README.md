@@ -2,7 +2,7 @@
 
 In this directory, you'll find the best strategies for importing CSV and Cypher queries into Memgraph.
 
-The cypher and csv folders contain examples of how to load a CYPHERL file and LOAD CSV via pymgclient and neo4jpython client. 
+The cypher and csv folders contain examples of how to load a CYPHERL file and run LOAD CSV via `pymgclient` and `neo4j` Python clients. 
 
 Before running any import script, make sure the `../dataset/graph500/download_dataset.sh` is executed first, 
 It will pull all necessary data into the dataset directory needed to run the tests. 
@@ -22,7 +22,7 @@ Below are the numbers representing import speed in different scenarios. The test
 CPU: AMD Ryzen 5 2600 Six-Core Processor
 RAM: 2x8GB 2133 MT/s DDR4
 
-All tests used ten concurrent database connections. All tests were made on docker containers; native versions of Memgraph will yield even better results.
+All tests used ten concurrent database connections. All tests were made on Docker containers; native versions of Memgraph will yield even better results.
 
 ### Node import speed reference
 
