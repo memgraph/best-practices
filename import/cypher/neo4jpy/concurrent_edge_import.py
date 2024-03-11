@@ -92,4 +92,9 @@ def run(size: str):
 
 
 if __name__ == "__main__":
-    run()
+    if len(sys.argv) < 2:
+        print("Usage: python concurrent_edge_import.py <size>")
+        sys.exit(1)
+    else: 
+        run(sys.argv[1])
+        sys.exit(0)
