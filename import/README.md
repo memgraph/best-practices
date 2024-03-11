@@ -22,7 +22,7 @@ Below are the numbers representing import speed in different scenarios. The test
 CPU: AMD Ryzen 5 2600 Six-Core Processor
 RAM: 2x8GB 2133 MT/s DDR4
 
-All tests used ten concurrent database connections.
+All tests used ten concurrent database connections. All tests were made on docker containers; native versions of Memgraph will yield even better results.
 
 ### Node import speed reference
 
