@@ -1,0 +1,137 @@
+// Create Persons with their attributes
+CREATE (john:Person {firstName: "John", lastName: "Doe", costPerDay: 500});
+CREATE (jane:Person {firstName: "Jane", lastName: "Smith", costPerDay: 600});
+
+// Create Skills
+CREATE (python:Skill {name: "Python"});
+CREATE (dataAnalysis:Skill {name: "Data Analysis"});
+
+// Create Domains
+CREATE (softwareDevelopment:Domain {name: "Software Development"});
+CREATE (dataScience:Domain {name: "Data Science"});
+
+// Create Tasks with their attributes
+CREATE (task1:Task {name: "Develop Backend", description: "Develop backend API using Python", manDays: 15});
+CREATE (task2:Task {name: "Data Cleaning", description: "Clean and preprocess raw data", manDays: 10});
+
+// Create Projects with their attributes
+CREATE (project1:Project {name: "Backend API Development", startDate: date("2024-11-01"), endDate: date("2024-12-15"), budget: 100000});
+CREATE (project2:Project {name: "Data Preprocessing", startDate: date("2024-10-01"), endDate: date("2024-11-30"), budget: 50000});
+
+// Create Clients with their attributes
+CREATE (client1:Client {name: "TechCorp", size: "Large"});
+CREATE (client2:Client {name: "DataSolutions", size: "Medium"});
+
+// Create Relationships
+
+// Match John and Python, then create HAS relationship
+MATCH (john:Person {firstName: "John", lastName: "Doe"}), (python:Skill {name: "Python"})
+CREATE (john)-[:HAS]->(python);
+
+// Match John and Software Development, then create PREFERS relationship
+MATCH (john:Person {firstName: "John", lastName: "Doe"}), (softwareDevelopment:Domain {name: "Software Development"})
+CREATE (john)-[:PREFERS]->(softwareDevelopment);
+
+// Match Jane and Data Analysis, then create HAS relationship
+MATCH (jane:Person {firstName: "Jane", lastName: "Smith"}), (dataAnalysis:Skill {name: "Data Analysis"})
+CREATE (jane)-[:HAS]->(dataAnalysis);
+
+// Match Jane and Data Science, then create PREFERS relationship
+MATCH (jane:Person {firstName: "Jane", lastName: "Smith"}), (dataScience:Domain {name: "Data Science"})
+CREATE (jane)-[:PREFERS]->(dataScience);
+
+// Match John and Task1, then create WORKS_ON relationship
+MATCH (john:Person {firstName: "John", lastName: "Doe"}), (task1:Task {name: "Develop Backend"})
+CREATE (john)-[:WORKS_ON]->(task1);
+
+// Match Jane and Task2, then create WORKS_ON relationship
+MATCH (jane:Person {firstName: "Jane", lastName: "Smith"}), (task2:Task {name: "Data Cleaning"})
+CREATE (jane)-[:WORKS_ON]->(task2);
+
+// Match Task1 and Python, then create NEEDS relationship
+MATCH (task1:Task {name: "Develop Backend"}), (python:Skill {name: "Python"})
+CREATE (task1)-[:NEEDS]->(python);
+
+// Match Task1 and Software Development, then create RELATED relationship
+MATCH (task1:Task {name: "Develop Backend"}), (softwareDevelopment:Domain {name: "Software Development"})
+CREATE (task1)-[:RELATED]->(softwareDevelopment);
+
+// Match Task1 and Project1, then create PART_OF relationship
+MATCH (task1:Task {name: "Develop Backend"}), (project1:Project {name: "Backend API Development"})
+CREATE (task1)-[:PART_OF]->(project1);
+
+// Match Task2 and Data Analysis, then create NEEDS relationship
+MATCH (task2:Task {name: "Data Cleaning"}), (dataAnalysis:Skill {name: "Data Analysis"})
+CREATE (task2)-[:NEEDS]->(dataAnalysis);
+
+// Match Task2 and Data Science, then create RELATED relationship
+MATCH (task2:Task {name: "Data Cleaning"}), (dataScience:Domain {name: "Data Science"})
+CREATE (task2)-[:RELATED]->(dataScience);
+
+// Match Task2 and Project2, then create PART_OF relationship
+MATCH (task2:Task {name: "Data Cleaning"}), (project2:Project {name: "Data Preprocessing"})
+CREATE (task2)-[:PART_OF]->(project2);
+
+// Match Project1 and Python, then create REQUIRES relationship
+MATCH (project1:Project {name: "Backend API Development"}), (python:Skill {name: "Python"})
+CREATE (project1)-[:REQUIRES]->(python);
+
+// Match Project1 and Software Development, then create RELATED relationship
+MATCH (project1:Project {name: "Backend API Development"}), (softwareDevelopment:Domain {name: "Software Development"})
+CREATE (project1)-[:RELATED]->(softwareDevelopment);
+
+// Match Project2 and Data Analysis, then create REQUIRES relationship
+MATCH (project2:Project {name: "Data Preprocessing"}), (dataAnalysis:Skill {name: "Data Analysis"})
+CREATE (project2)-[:REQUIRES]->(dataAnalysis);
+
+// Match Project2 and Data Science, then create RELATED relationship
+MATCH (project2:Project {name: "Data Preprocessing"}), (dataScience:Domain {name: "Data Science"})
+CREATE (project2)-[:RELATED]->(dataScience);
+
+// Match Client1 and Project1, then create REQUESTED relationship
+MATCH (client1:Client {name: "TechCorp"}), (project1:Project {name: "Backend API Development"})
+CREATE (client1)-[:REQUESTED]->(project1);
+
+// Match Client2 and Project2, then create REQUESTED relationship
+MATCH (client2:Client {name: "DataSolutions"}), (project2:Project {name: "Data Preprocessing"})
+CREATE (client2)-[:REQUESTED]->(project2);
+
+// Create a new Person without the appropriate skill and outside their domain of interest
+CREATE (mike:Person {firstName: "Mike", lastName: "Johnson", costPerDay: 400});
+
+// Create a new Skill that Mike does NOT have
+CREATE (java:Skill {name: "Java"});
+
+// Create a new Domain that Mike PREFERS
+CREATE (marketing:Domain {name: "Marketing"});
+
+// Create a new Task that requires a skill Mike does NOT have and is outside his domain of interest
+CREATE (task3:Task {name: "Develop Mobile App", description: "Develop a mobile app using Java", manDays: 20});
+
+// Create a new Domain for the Task that is different from Mike's preferred domain
+CREATE (mobileDevelopment:Domain {name: "Mobile Development"});
+
+// Create a new Project for this Task
+CREATE (project3:Project {name: "Mobile App Development", startDate: date("2024-12-01"), endDate: date("2025-01-30"), budget: 80000});
+
+// Create Relationships
+
+// Match Mike and Marketing, then create PREFERS relationship
+MATCH (mike:Person {firstName: "Mike", lastName: "Johnson"}), (marketing:Domain {name: "Marketing"})
+CREATE (mike)-[:PREFERS]->(marketing);
+
+// Match Task3 and Java (the skill Mike does NOT have), then create NEEDS relationship
+MATCH (task3:Task {name: "Develop Mobile App"}), (java:Skill {name: "Java"})
+CREATE (task3)-[:NEEDS]->(java);
+
+// Match Task3 and Mobile Development (a domain that Mike is NOT interested in), then create RELATED relationship
+MATCH (task3:Task {name: "Develop Mobile App"}), (mobileDevelopment:Domain {name: "Mobile Development"})
+CREATE (task3)-[:RELATED]->(mobileDevelopment);
+
+// Match Mike and Task3 (even though Mike lacks the appropriate skill and is working outside his preferred domain), then create WORKS_ON relationship
+MATCH (mike:Person {firstName: "Mike", lastName: "Johnson"}), (task3:Task {name: "Develop Mobile App"})
+CREATE (mike)-[:WORKS_ON]->(task3);
+
+// Match Task3 and Project3, then create PART_OF relationship
+MATCH (task3:Task {name: "Develop Mobile App"}), (project3:Project {name: "Mobile App Development"})
+CREATE (task3)-[:PART_OF]->(project3);
