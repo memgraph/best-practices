@@ -9,7 +9,7 @@ large data records to achieve high performance.
 
 Install the required libraries from the `arrow-flight` folder:
 
-```
+```bash
 pip install -r requirements.txt
 ```
 
@@ -17,19 +17,19 @@ pip install -r requirements.txt
 
 To test the usage, first start Memgraph MAGE:
 
-```python
+```bash
 docker run -p 7687:7687 memgraph/memgraph-mage
 ```
 
 Then, start the server:
 
-```python
+```bash
 python server.py
 ```
 
 In the end, start the client:
 
-```python
+```bash
 python client.py
 ```
 

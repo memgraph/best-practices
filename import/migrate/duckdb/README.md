@@ -7,7 +7,7 @@ database and query various data sources.
 
 Install the required libraries from the `duckdb` folder:
 
-```
+```bash
 pip install -r requirements.txt
 ```
 
@@ -15,7 +15,7 @@ pip install -r requirements.txt
 
 To test the usage, first start Memgraph MAGE:
 
-```python
+```bash
 docker run -p 7687:7687 memgraph/memgraph-mage
 ```
 
@@ -34,7 +34,7 @@ docker cp users.csv <container_id>:/usr/lib/memgraph/users.csv
 
 Then, start the client:
 
-```python
+```bash
 python client.py
 ```
 
