@@ -18,7 +18,6 @@ The script performs the following actions:
    - A `MATCH` query is allowed.
    - A `CREATE` query fails due to insufficient permissions.
 
----
 
 ## 🚀 How to Run Memgraph with Docker
 
@@ -27,6 +26,7 @@ To run Memgraph Enterprise using Docker:
 ```bash
 docker run -it --rm -p 7687:7687 -e MEMGRAPH_ORGANIZATION_NAME=<YOUR_ORG_NAME> -e MEMGRAPH_ENTERPRISE_LICENSE=<YOUR_ENTERPRISE_LICENSE> memgraph/memgraph:3.1.1
 ```
+
 
 ## 🛠 Requirements
 
@@ -42,7 +42,6 @@ Your `requirements.txt` should include:
 gqlalchemy
 ```
 
----
 
 ## 🧪 How to Run the Script
 
@@ -52,6 +51,7 @@ Once Memgraph is running:
 python3 creating_read_only_user.py
 ```
 
+
 ## 🔖 Version Compatibility
 
 This example was built and tested with:
@@ -59,6 +59,7 @@ This example was built and tested with:
 - **Memgraph v3.1.1**
 
 If you run into any issues or have questions, feel free to reach out on the [Memgraph Discord server](https://discord.gg/memgraph). We're happy to help!
+
 
 ## 🏢 Enterprise or Community?
 
