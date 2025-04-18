@@ -28,9 +28,6 @@ To run Memgraph Enterprise using Docker:
 docker run -it --rm -p 7687:7687 -e MEMGRAPH_ORGANIZATION_NAME=<YOUR_ORG_NAME> -e MEMGRAPH_ENTERPRISE_LICENSE=<YOUR_ENTERPRISE_LICENSE> memgraph/memgraph:3.1.1
 ```
 
-This command launches:
-- **Memgraph database** on port `7687`
-
 ## 🛠 Requirements
 
 Install dependencies with:
