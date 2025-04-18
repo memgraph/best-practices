@@ -6,6 +6,7 @@ Please explain what you're showcasing at a best practice.
 - [ ] Best practice is categorized inside one of the directories of this repo
 - [ ] Provided code of the best practice
 - [ ] Documented the code of the best practice thoroughly
+- [ ] Added requirements.txt file for installing dependencies
 
 ### README.md checklist
 - [ ] Provided steps on how to run Memgraph
