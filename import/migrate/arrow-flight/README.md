@@ -1,22 +1,38 @@
 # Arrow Flight
 
-With the `arrow_flight()` procedure, users can access data sources which support
+With the `migrate.arrow_flight()` procedure, users can access data sources which support
 the [Arrow Flight RPC
 protocol](https://arrow.apache.org/docs/format/Flight.html) for transfer of
 large data records to achieve high performance.
 
-To test the usage, first start the server:
+## Prerequisites
+
+Install the required libraries from the `arrow-flight` folder:
+
+```
+pip install -r requirements.txt
+```
+
+## Quick start
+
+To test the usage, first start Memgraph MAGE:
+
+```python
+docker run -p 7687:7687 memgraph/memgraph-mage
+```
+
+Then, start the server:
 
 ```python
 python server.py
 ```
 
-Then, start the client:
+In the end, start the client:
 
 ```python
 python client.py
 ```
 
-The client script connects to local Memgraph instance and runs `arrow_flight()`
+The client script connects to local Memgraph instance and runs `migrate.arrow_flight()`
 procedure which creates client, connects to the server and streams rows to
-Memgraph. 
+Memgraph where it will create nodes.
