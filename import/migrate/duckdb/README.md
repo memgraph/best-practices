@@ -41,5 +41,4 @@ python client.py
 The client script connects to the local Memgraph instance and runs
 `migrate.duckdb()` procedure which runs DuckDB with the in-memory mode, without
 any persistence and is used just to proxy to the underlying data sources. The
-procedure will store your data in DuckDB and streams results from DuckDB to
-Memgraph where it will create nodes.
+procedure streams results from DuckDB to Memgraph where it will create nodes.
