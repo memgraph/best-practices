@@ -25,8 +25,21 @@ memgraph.execute("SET ROLE FOR readonly_user TO readonly")
 
 
 # By default, user will be able to log into the default database 'memgraph'
-print(list(memgraph.execute_and_fetch("SHOW DATABASE PRIVILEGES FOR readonly_user")))
+print("Database privileges for admin:")
+print(list(memgraph.execute_and_fetch("SHOW DATABASE PRIVILEGES FOR admin")))
+print()
 
+print("General privileges for admin:")
+print(list(memgraph.execute_and_fetch("SHOW PRIVILEGES FOR admin")))
+print()
+
+print("Database privileges for read only user:")
+print(list(memgraph.execute_and_fetch("SHOW DATABASE PRIVILEGES FOR readonly_user")))
+print()
+
+print("General privileges for read only user:")
+print(list(memgraph.execute_and_fetch("SHOW PRIVILEGES FOR readonly_user")))
+print()
 
 readonly_connection = Memgraph(username="readonly_user", password="test")
 print(list(readonly_connection.execute_and_fetch("MATCH (n) RETURN n")))
