@@ -24,7 +24,7 @@ memgraph.execute("CREATE USER readonly_user IDENTIFIED BY 'test'")
 memgraph.execute("SET ROLE FOR readonly_user TO readonly")
 
 
-# By default, user will be able to log into the default database 'memgraph'
+# Admin user has all databases privilege and all query privileges
 print("Database privileges for admin:")
 print(list(memgraph.execute_and_fetch("SHOW DATABASE PRIVILEGES FOR admin")))
 print()
@@ -33,6 +33,7 @@ print("General privileges for admin:")
 print(list(memgraph.execute_and_fetch("SHOW PRIVILEGES FOR admin")))
 print()
 
+# Read-only user has only memgraph database privilege and only read query privileges
 print("Database privileges for read only user:")
 print(list(memgraph.execute_and_fetch("SHOW DATABASE PRIVILEGES FOR readonly_user")))
 print()
