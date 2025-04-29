@@ -1,0 +1,8 @@
+ADD COORDINATOR 1 WITH CONFIG {"bolt_server": "localhost:7691", "coordinator_server": "coord1:10111", "management_server": "coord1:12121"};
+ADD COORDINATOR 2 WITH CONFIG {"bolt_server": "localhost:7692", "coordinator_server": "coord2:10112", "management_server": "coord2:12122"};
+ADD COORDINATOR 3 WITH CONFIG {"bolt_server": "localhost:7693", "coordinator_server": "coord3:10113", "management_server": "coord3:12123"};
+
+REGISTER INSTANCE instance_1 WITH CONFIG {"bolt_server": "localhost:7687", "management_server": "instance1:13011", "replication_server": "instance1:10001"};
+REGISTER INSTANCE instance_2 WITH CONFIG {"bolt_server": "localhost:7688", "management_server": "instance2:13012", "replication_server": "instance2:10002"};
+REGISTER INSTANCE instance_3 WITH CONFIG {"bolt_server": "localhost:7689", "management_server": "instance3:13013", "replication_server": "instance3:10003"};
+SET INSTANCE instance_1 TO MAIN;
