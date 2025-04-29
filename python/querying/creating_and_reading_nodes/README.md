@@ -23,7 +23,7 @@ The script performs the following actions:
 To run Memgraph Community using Docker:
 
 ```bash
-docker run -it --rm -p 7687:7687 memgraph/memgraph:3.1.1
+docker run -it --rm -p 7687:7687 memgraph/memgraph:3.2
 ```
 
 
@@ -55,11 +55,11 @@ python3 creating_and_reading_nodes.py
 
 This example was built and tested with:
 
-- **Memgraph v3.1.1**
+- **Memgraph v3.2**
 
 If you run into any issues or have questions, feel free to reach out on the [Memgraph Discord server](https://discord.gg/memgraph). We're happy to help!
 
 
 ## 🏢 Enterprise or Community?
 
-**Community Edition** 
+This example works with **Memgraph Community Edition** 
