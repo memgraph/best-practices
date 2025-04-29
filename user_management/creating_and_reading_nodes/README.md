@@ -1,5 +1,5 @@
 
-# Creating and reading nodes with Memgraph Example
+# Creating and reading nodes with Memgraph Example 
 
 This example demonstrates how to use read and write queries via the `gqlalchemy` Python client.
 
@@ -20,7 +20,7 @@ The script performs the following actions:
 
 ## 🚀 How to Run Memgraph with Docker
 
-To run Memgraph Enterprise using Docker:
+To run Memgraph Community using Docker:
 
 ```bash
 docker run -it --rm -p 7687:7687 memgraph/memgraph:3.1.1
@@ -62,6 +62,4 @@ If you run into any issues or have questions, feel free to reach out on the [Mem
 
 ## 🏢 Enterprise or Community?
 
-> 🛑 This example **requires Memgraph Enterprise**.
-
-The **Community Edition** does not support role-based access control (RBAC), or privilege assignment.
+**Community Edition** 
