@@ -47,7 +47,7 @@ gqlalchemy
 Once Memgraph is running:
 
 ```bash
-python3 creating_read_only_user.py
+python3 creating_and_reading_nodes.py
 ```
 
 
