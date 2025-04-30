@@ -3,12 +3,6 @@ from gqlalchemy import Memgraph, Node
 # Establish a connection to Memgraph
 memgraph = Memgraph(host='127.0.0.1', port=7687)
 
-# Create class for node you are creating or fetching
-class Person(Node):
-    name: str
-    surname: str
-    age: int
-
 # Create a Person node with properties name, surname and age
 query = """
 CREATE (n:Person {name: "Marko", surname: "Polo", age: 65})
