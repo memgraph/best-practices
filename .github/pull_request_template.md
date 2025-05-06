@@ -7,6 +7,7 @@ Please explain what you're showcasing at a best practice.
 - [ ] Provided code of the best practice
 - [ ] Documented the code of the best practice thoroughly
 - [ ] Added requirements.txt file for installing dependencies
+- [ ] Added example to main `README.md` best practices list
 
 ### README.md checklist
 - [ ] Provided steps on how to run Memgraph
