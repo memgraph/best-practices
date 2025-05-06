@@ -40,16 +40,16 @@ Deploy Memgraph using methods that suit your environment, whether it's container
 ### Import
 
 ### Java
-- Simple Java app with ingestion and querying
+- [Simple Java app with ingestion and querying](./java/querying/)
 
 ### Python
-- GQLAlchemy basic example of creating and reading nodes
+- [GQLAlchemy basic example of creating and reading nodes](./python/querying/creating_and_reading_nodes/)
 
 ### Querying
-- Path traversals tutorial
+- [Path traversals tutorial](./querying/path_traversals/)
 
 ### User management
-- Creating a read only user
+- [Creating a read only user](./user_management/creating_read_only_user/)
 
 ## Office Hours
 
