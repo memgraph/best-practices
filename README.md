@@ -34,8 +34,8 @@ Deploy Memgraph using methods that suit your environment, whether it's container
 ## List of best practices
 
 ### High availability (HA)
-- Docker deployment
-- Docker compose deployment
+- [Docker deployment](./ha/docker_deployment/)
+- [Docker compose deployment](./ha/docker_compose_deployment/)
 
 ### Import
 
