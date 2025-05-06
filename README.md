@@ -31,6 +31,26 @@ Querying Memgraph via Cypher is a common operation that needs to be properly opt
 
 Deploy Memgraph using methods that suit your environment, whether it's containerized with Docker or a native Linux installation.
 
+## List of best practices
+
+### High availability (HA)
+- Docker deployment
+- Docker compose deployment
+
+### Import
+
+### Java
+- Simple Java app with ingestion and querying
+
+### Python
+- GQLAlchemy basic example of creating and reading nodes
+
+### Querying
+- Path traversals tutorial
+
+### User management
+- Creating a read only user
+
 ## Office Hours
 
 Talk to us about data modeling, optimizing queries, defining infrastructure requirements or migrating from your existing graph database. No nonsense or sales pitch, just tech.
