@@ -43,6 +43,41 @@ if __name__ == "__main__":
     # Record the start time before execution begins
     start_time = time.time()
 
+    # Establish a connection to Memgraph using gqlalchemy
+    memgraph = Memgraph(host='127.0.0.1', port=7687)
+
+    # Swapping into in memory analytical mode in order to maximize import performance
+    query = """
+    STORAGE MODE IN_MEMORY_ANALYTICAL;
+    """
+
+    # Execute each Cypher query using gqlalchemy
+    result = list(memgraph.execute_and_fetch(query))
+
+    # Clearing previous data in graph
+    query = """
+    DROP GRAPH;
+    """
+
+    # Execute each Cypher query using gqlalchemy
+    result = list(memgraph.execute_and_fetch(query))
+
+    # Creating index for label
+    query = """
+    CREATE INDEX ON :User;
+    """
+
+    # Execute each Cypher query using gqlalchemy
+    result = list(memgraph.execute_and_fetch(query))
+
+    # Creating index for label+property, important for importing relationships
+    query = """
+    CREATE INDEX ON :User(id);
+    """
+
+    # Execute each Cypher query using gqlalchemy
+    result = list(memgraph.execute_and_fetch(query))
+
     # List of node Cypher files to run in parallel
     node_files = [f"split_queries/nodes_part_{i+1}.cypher" for i in range(8)]
 
