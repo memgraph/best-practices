@@ -1,24 +1,31 @@
 import multiprocessing
-import subprocess
 import os
-import time  # Import the time module
+import time
+from gqlalchemy import Memgraph
 
-# Function to run a Cypher file using mgconsole with input redirection
+# Function to run a Cypher file using gqlalchemy
 def run_cypher_file(cypher_file):
-    command = f"mgconsole < {cypher_file}"
+    # Establish a connection to Memgraph using gqlalchemy
+    memgraph = Memgraph(host='127.0.0.1', port=7687)
+
     try:
-        # Print the command being executed
-        print(f"Running {cypher_file} using: {command}")
-        
-        # Execute the command with input redirection in shell
-        result = subprocess.run(command, shell=True, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        
-        # Print the output and errors (for debugging)
-        print(f"Process {multiprocessing.current_process().name} executed successfully: {cypher_file}")
-        print(f"Output: {result.stdout.decode()}")
-        print(f"Errors: {result.stderr.decode()}")
-    except subprocess.CalledProcessError as e:
-        print(f"Process {multiprocessing.current_process().name} failed: {e.stderr.decode()}")
+        # Open the Cypher file and read it line by line
+        with open(cypher_file, "r") as f:
+            for line in f:
+                line = line.strip()  # Remove any surrounding whitespace or newlines
+                if line:  # Ensure the line isn't empty
+                    # Debugging: Print the query to verify its contents
+                    print(f"Executing query: {line}")
+                    
+                    # Execute each Cypher query using gqlalchemy
+                    result = list(memgraph.execute_and_fetch(line))
+                    print(f"Query executed successfully: {line}")
+                    # Optional: print the result for debugging
+                    print(f"Result: {result}")
+                else:
+                    print(f"Skipping empty line in file {cypher_file}")
+    except Exception as e:
+        print(f"Error executing queries in {cypher_file}: {str(e)}")
 
 # Run queries in parallel using multiprocessing
 def run_in_parallel(cypher_files):
