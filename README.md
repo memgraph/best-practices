@@ -54,6 +54,9 @@ Deploy Memgraph using methods that suit your environment, whether it's container
 ### Querying
 - [Path traversals tutorial](./querying/path_traversals/)
 
+### Time-to-live
+- [Node TTL demo](./ttl/node_ttl_demo/)
+
 ### User management
 - [Creating a read only user](./user_management/creating_read_only_user/)
 
