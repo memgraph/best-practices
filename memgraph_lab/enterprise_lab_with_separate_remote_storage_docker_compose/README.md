@@ -1,4 +1,4 @@
-# Memgraph Lab Enterprise Edition with remote storage deployment in Docker compose
+# Memgraph Lab Enterprise Edition with separate remote storage deployment in Docker compose
 
 This example demonstrates how to deploy Memgraph Enterprise with Memgraph Lab and remote storage 
 in a docker compose file. This guide will use an additional Memgraph instance in order to save 
