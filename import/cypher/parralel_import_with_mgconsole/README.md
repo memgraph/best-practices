@@ -21,16 +21,23 @@ The script performs the following actions:
 To run Memgraph Community using Docker:
 
 ```bash
-docker run -it --rm -p 7687:7687 memgraph/memgraph:3.1.1
+docker run -it --rm -p 7687:7687 memgraph/memgraph:3.2
 ```
 
 
 ## 🛠 Requirements
 
-Install CLI as described in docs:
+Install dependencies with:
 
-https://memgraph.com/docs/getting-started/cli#install-mgconsole
+```bash
+pip install -r requirements.txt
+```
 
+Your `requirements.txt` should include:
+
+```
+gqlalchemy
+```
 
 ## 🧪 How to Run the Script
 
@@ -47,7 +54,7 @@ python3 multiprocess_import_test.py
 
 This example was built and tested with:
 
-- **Memgraph v3.1.1**
+- **Memgraph v3.2**
 
 If you run into any issues or have questions, feel free to reach out on the [Memgraph Discord server](https://discord.gg/memgraph). We're happy to help!
 
