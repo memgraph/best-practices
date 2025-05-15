@@ -51,7 +51,7 @@ pip install gqlalchemy==1.7.0
 Once Memgraph is running:
 
 ```bash
-python3 explain_profile.py
+python3 querying/explain_profile/explain_profile.py
 ```
 
 The script will automatically use the energy management system dataset from `datasets/energy-management-memgraph-lab/energy-management-system.cypherl`.
