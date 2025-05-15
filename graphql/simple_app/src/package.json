@@ -1,0 +1,15 @@
+{
+  "name": "memgraph-graphql-example",
+  "version": "1.0.0",
+  "description": "GraphQL example with Memgraph",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@neo4j/graphql": "^4.4.0",
+    "@apollo/server": "^4.10.0",
+    "graphql": "^16.8.1",
+    "neo4j-driver": "^5.14.1"
+  }
+}
