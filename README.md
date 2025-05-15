@@ -52,7 +52,9 @@ Deploy Memgraph using methods that suit your environment, whether it's container
 - [GQLAlchemy basic example of creating and reading nodes](./python/querying/creating_and_reading_nodes/)
 
 ### Querying
+- [Explain and profile of the query](./querying/explain_profile/)
 - [Path traversals tutorial](./querying/path_traversals/)
+
 
 ### Time-to-live
 - [Node TTL demo](./ttl/node_ttl_demo/)
