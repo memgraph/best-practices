@@ -33,6 +33,9 @@ Deploy Memgraph using methods that suit your environment, whether it's container
 
 ## List of best practices
 
+## GraphQL
+- [Simple application with Memgraph and Neo4j GraphQL](./graphql/simple_app/)
+
 ### High availability (HA)
 - [Docker deployment](./ha/docker_deployment/)
 - [Docker compose deployment](./ha/docker_compose_deployment/)
