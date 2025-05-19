@@ -23,6 +23,8 @@ Learn the tips & tricks on how to best model your data and what to look after be
 
 After [installing Memgraph](https://memgraph.com/docs/getting-started), the first step is [data import](https://memgraph.com/docs/data-migration). Whether you're migrating from another database or creating a new dataset, tips & tricks from the [Import Best Practices](https://memgraph.com/docs/data-migration/best-practices) will speed up your import process, especially on a larger scale. 
 
+If you're migrating from other databases, check the [examples](./import/migrate/) that use the `migrate` module.
+
 ### :question: [Querying Best Practices](https://memgraph.com/docs/querying/best-practices)
 
 Querying Memgraph via Cypher is a common operation that needs to be properly optimized. [Querying Best Practices](https://memgraph.com/docs/querying/best-practices) will show how to query Memgraph and write Cypher so the queries are executed as fast as possible with the least amount of resources.
