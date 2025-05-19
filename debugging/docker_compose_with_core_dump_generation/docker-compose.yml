@@ -1,0 +1,27 @@
+services:
+  memgraph:
+    image: memgraph/memgraph-mage:3.2.1-relwithdebinfo
+    container_name: memgraph
+    privileged: true
+    ports:
+      - "7687:7687"
+      - "7444:7444"
+      - "9091:9091"
+    volumes:
+      - ./cores:/tmp/cores
+    command: ["--log-level=TRACE", "--also-log-to-stderr=true"]
+    ulimits:
+      core:
+        hard: -1
+        soft: -1
+ 
+  lab:
+    image: memgraph/lab:3.2.0
+    container_name: memgraph-lab
+    ports:
+      - "3000:3000"
+    depends_on:
+      - memgraph
+    environment:
+      - QUICK_CONNECT_MG_HOST=memgraph
+      - QUICK_CONNECT_MG_PORT=7687
