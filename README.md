@@ -35,7 +35,10 @@ Deploy Memgraph using methods that suit your environment, whether it's container
 
 ## List of best practices
 
-## GraphQL
+### Debugging
+- [Generating a core dump with Memgraph in Docker Compose](./debugging/docker_compose_with_core_dump_generation/)
+
+### GraphQL
 - [Simple application with Memgraph and Neo4j GraphQL](./graphql/simple_app/)
 
 ### High availability (HA)
