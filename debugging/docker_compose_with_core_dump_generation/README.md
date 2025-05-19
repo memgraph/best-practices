@@ -9,7 +9,7 @@ This example demonstrates how to run Memgraph in a Docker container configured t
    ```bash
    chmod a+rwx /tmp/cores
    echo "/tmp/cores/core.%e.%p.%h.%t" | sudo tee /proc/sys/kernel/core_pattern
-````
+   ```
 
 3. Use the provided script to trigger a segmentation fault inside the container.
 
