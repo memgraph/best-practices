@@ -1,6 +1,6 @@
 # Memgraph core dump generation with Docker Compose
 
-This example demonstrates how to run Memgraph in a Docker container configured to generate core dumps, which can be useful for debugging and diagnosing crashes.
+This example demonstrates how to run Memgraph in a Docker container configured to generate core dumps, which can be useful for debugging and diagnosing crashes. Also showcased is the printing of stacktrace, to localize the issue.
 
 ## ⚙️ How to Enable Core Dump Generation
 
