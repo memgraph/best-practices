@@ -46,6 +46,9 @@ Deploy Memgraph using methods that suit your environment, whether it's container
 - [Docker compose deployment](./ha/docker_compose_deployment/)
 
 ### Import
+- [Importing data from Arrow Flight](./import/migrate/arrow-flight/)
+- [Importing data with DuckDB](./import/migrate/duckdb/)
+- [Importing data from Neo4j](./import/migrate/neo4j/)
 
 ### Java
 - [Simple Java app with ingestion and querying](./java/querying/)
