@@ -1,0 +1,24 @@
+version: "3.8"
+
+services:
+  memgraph:
+    image: memgraph/memgraph-mage:3.2.1
+    container_name: memgraph
+    ports:
+      - "7687:7687"
+      - "3000:3000"
+    volumes:
+      - memgraph_data:/var/lib/memgraph
+      - memgraph_logs:/var/log/memgraph
+    command: [
+      --log-level=TRACE,
+      --also-log-to-stderr=true,
+      --query-execution-timeout-sec=0,
+      --storage-snapshot-interval-sec=0,
+      --storage-snapshot-interval=,
+      --storage-wal-enabled=false
+    ]
+
+volumes:
+  memgraph_data:
+  memgraph_logs:
