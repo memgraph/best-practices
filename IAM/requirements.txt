@@ -1,0 +1,6 @@
+gqlalchemy==1.3.2
+faker==19.13.0
+tqdm==4.66.2
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.28
+python-dotenv==1.0.1 
