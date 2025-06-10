@@ -34,6 +34,24 @@ The script will:
 3. Create a snapshot of the data
 4. Redeploy using `values.yaml` with full HA configuration
 
+For the flow of restoring a custom snapshot into clustered Memgraph, here are the following steps:
+1. Run `chmod +x restore_snapshot_ha.sh` to make the script executable
+2. Update both `values.yaml` file with your Memgraph Enterprise details:
+   - Replace `<your-license>` with your Memgraph Enterprise license key
+   - Replace `<your-organization-name>` with your organization name
+3. To deploy Memgraph HA cluster, run:
+
+```bash
+./restore_snapshot_ha.sh
+```
+
+The script will:
+1. Deploy Memgraph using `values.yaml`
+2. Inject the snapshot into the main instance data directory
+3. Connect the cluster
+4. Restore the snapshot on an arbitrary tenant
+
+
 ## 🔖 Version Compatibility
 
 This example was built and tested with:
