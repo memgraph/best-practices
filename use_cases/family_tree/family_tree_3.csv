@@ -1,0 +1,11 @@
+id,name,family_id,gender,dob,mother_id,father_id
+22,Carlos Rodriguez,5,M,1985-01-25,,
+23,Ana Rodriguez,5,F,1987-06-12,,
+24,Sofia Rodriguez,5,F,2012-03-18,23,22
+25,Lucas Rodriguez,5,M,2014-10-22,23,22
+26,Maria Garcia,6,F,1972-09-05,,
+27,Jose Garcia,6,M,1975-11-30,,
+28,Isabella Garcia,6,F,2001-04-15,26,27
+29,Diego Garcia,6,M,2004-07-08,26,27
+30,Carmen Garcia,6,F,2008-12-20,26,27
+31,Antonio Garcia,6,M,2011-02-14,26,27 

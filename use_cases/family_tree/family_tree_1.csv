@@ -1,0 +1,11 @@
+id,name,family_id,gender,dob,mother_id,father_id
+1,John Smith,1,M,1980-05-15,,
+2,Sarah Smith,1,F,1982-08-22,,
+3,Michael Smith,1,M,2005-03-10,2,1
+4,Emma Smith,1,F,2007-11-05,2,1
+5,David Smith,1,M,2010-06-18,2,1
+6,Lisa Johnson,2,F,1975-12-03,,
+7,Robert Johnson,2,M,1978-04-17,,
+8,Jessica Johnson,2,F,2003-09-25,6,7
+9,Christopher Johnson,2,M,2006-01-30,6,7
+10,Amanda Johnson,2,F,2009-07-12,6,7 

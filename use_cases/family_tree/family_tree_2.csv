@@ -1,0 +1,12 @@
+id,name,family_id,gender,dob,mother_id,father_id
+11,William Brown,3,M,1965-02-14,,
+12,Mary Brown,3,F,1968-10-08,,
+13,James Brown,3,M,1990-06-20,12,11
+14,Patricia Brown,3,F,1992-12-15,12,11
+15,Thomas Brown,3,M,1995-04-03,12,11
+16,Elizabeth Brown,3,F,1998-08-27,12,11
+17,Daniel Wilson,4,M,1970-03-11,,
+18,Jennifer Wilson,4,F,1973-07-19,,
+19,Matthew Wilson,4,M,1995-11-02,18,17
+20,Ashley Wilson,4,F,1997-05-14,18,17
+21,Andrew Wilson,4,M,2000-09-08,18,17 
