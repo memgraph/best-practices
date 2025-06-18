@@ -1,5 +1,7 @@
-const typeDefs = `#graphql
-  type Building {
+const { gql } = require('graphql-tag')
+
+const typeDefs = gql`
+  type Building @node {
     id: Int!
     name: String!
     address: String!
@@ -8,45 +10,31 @@ const typeDefs = `#graphql
     meters: [Meter!]! @relationship(type: "HAS_METER", direction: OUT)
   }
 
-  type Device {
+  type Device @node {
     id: Int!
     name: String!
     type: String!
     powerConsumption: Float
     status: String
-    building: Building! @relationship(type: "HAS_DEVICE", direction: IN)
+    building: [Building!]! @relationship(type: "HAS_DEVICE", direction: IN)
     readings: [Reading!]! @relationship(type: "HAS_READING", direction: OUT)
   }
 
-  type Meter {
+  type Meter @node {
     id: Int!
     serialNumber: String!
     type: String!
-    building: Building! @relationship(type: "HAS_METER", direction: IN)
+    building: [Building!]! @relationship(type: "HAS_METER", direction: IN)
     readings: [Reading!]! @relationship(type: "HAS_READING", direction: OUT)
   }
 
-  type Reading {
+  type Reading @node {
     id: Int!
     value: Float!
     unit: String!
-    device: Device @relationship(type: "HAS_READING", direction: IN)
-    meter: Meter @relationship(type: "HAS_READING", direction: IN)
-  }
-
-  type Query {
-    buildings: [Building!]!
-    devices: [Device!]!
-    meters: [Meter!]!
-    readings: [Reading!]!
-  }
-
-  type Mutation {
-    createBuilding(id: Int!, name: String!, address: String!): Building!
-    createDevice(id: Int!, name: String!, type: String!, buildingId: ID!): Device!
-    createMeter(id: Int!, serialNumber: String!, type: String!, buildingId: ID!): Meter!
-    createReading(id: Int!, value: Float!, unit: String!, deviceId: ID, meterId: ID): Reading!
+    device: [Device!]! @relationship(type: "HAS_READING", direction: IN)
+    meter: [Meter!]! @relationship(type: "HAS_READING", direction: IN)
   }
 `;
 
-module.exports = typeDefs; 
+module.exports = typeDefs;

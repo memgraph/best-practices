@@ -50,7 +50,8 @@ const startServer = async () => {
         const { url } = await startStandaloneServer(server, {
             context: async ({ req }) => ({ 
                 req, 
-                sessionConfig: { database: "memgraph" }
+                sessionConfig: { database: "memgraph" },
+                cypherQueryOptions: { addVersionPrefix: false }
             }),
             listen: { port: 4000 },
         });
