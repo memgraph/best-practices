@@ -60,7 +60,7 @@ id,name,family_id,gender,dob,mother_id,father_id
 
 2. **Start Memgraph** (if not already running):
    ```bash
-   docker run -it -p 7687:7687 -p 7444:7444 memgraph/memgraph-platform
+   docker run -it -p 7687:7687 -p 7444:7444 memgraph/memgraph-mage
    ```
 
 3. **Run the example**:
