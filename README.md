@@ -74,6 +74,9 @@ Deploy Memgraph using methods that suit your environment, whether it's container
 ### Triggers
 - [Triggers write-write conflict demonstration](./triggers/trigger_write_write_conflict/)
 
+### Use cases
+- [Family tree demo](./use_cases/family_tree/)
+
 ### User management
 - [Creating a read only user](./user_management/creating_read_only_user/)
 
