@@ -48,6 +48,7 @@ python-dotenv==1.0.0
 1. First, start the GraphQL server:
 ```bash
 cd src
+npm install
 node index.js
 ```
 
