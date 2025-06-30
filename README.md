@@ -49,7 +49,8 @@ Deploy Memgraph using methods that suit your environment, whether it's container
 ### Import
 - [Importing data from Arrow Flight](./import/migrate/arrow-flight/)
 - [Importing data with DuckDB](./import/migrate/duckdb/)
-- [Importing data from Neo4j](./import/migrate/neo4j/)
+- [Importing data from Neo4j (nodes only)](./import/migrate/neo4j/migrate_nodes/)
+- [Import tool from Neo4j (complete)](./import/migrate/neo4j/complete_migration/)
 
 ### Java
 - [Simple Java app with ingestion and querying](./java/querying/)
