@@ -1,0 +1,36 @@
+version: "3.8"
+
+services:
+  aurora:
+    image: mysql:8.0
+    container_name: aurora
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: testdb
+      MYSQL_USER: testuser
+      MYSQL_PASSWORD: testpass
+    ports:
+      - "3306:3306"
+    volumes:
+      - aurora_data:/var/lib/mysql
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    command: --default-authentication-plugin=mysql_native_password
+
+  memgraph:
+    image: memgraph/memgraph-mage:3.3
+    container_name: memgraph
+    ports:
+      - "7687:7687"
+      - "3000:3000"
+    volumes:
+      - memgraph_data:/var/lib/memgraph
+      - memgraph_logs:/var/log/memgraph
+    # Setting query timeout to 0 so the timeout does not happen
+    command: [--log-level=TRACE, --also-log-to-stderr=true, --query-execution-timeout-sec=0]
+    depends_on:
+      - aurora
+
+volumes:
+  aurora_data:
+  memgraph_data:
+  memgraph_logs: 

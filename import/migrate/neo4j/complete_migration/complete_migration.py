@@ -66,7 +66,7 @@ def ensure_neo4j_has_data():
             # Create relationships between all nodes of consecutive labels
             query = f"""
             MATCH (a:{label1}), (b:{label2})
-            CREATE (a)-[r:{rel_type} {{strength: {random.randint(1, 10)}}}]->(b)
+            CREATE (a)-[r:{rel_type} {{strength: {random.random()}, created_at: datetime()}}]->(b)
             """
             session.run(query)
             
@@ -119,7 +119,7 @@ def migrate_with_gqlalchemy():
         print("[Worker 1] Verifying Neo4j connectivity...")
         memgraph.execute(
             """
-            CALL migrate.neo4j("RETURN 1;", {host: "neo4j", port: 7687}) YIELD row RETURN row;
+            call migrate_neo4j_driver2.neo4j("RETURN 1;", {host: "neo4j", port: 7687}) YIELD row RETURN row;
             """
         )
 
@@ -128,7 +128,7 @@ def migrate_with_gqlalchemy():
         # Get comprehensive schema information using apoc.meta.schema()
         schema_result = list(memgraph.execute_and_fetch(
             """
-            CALL migrate.neo4j("CALL apoc.meta.schema() YIELD value RETURN value", {host: "neo4j", port: 7687}) YIELD row RETURN row.value as schema
+            call migrate_neo4j_driver2.neo4j("CALL apoc.meta.schema() YIELD value RETURN value", {host: "neo4j", port: 7687}) YIELD row RETURN row.value as schema
             """
         ))
         
@@ -158,7 +158,7 @@ def migrate_with_gqlalchemy():
             print(f"[Worker 1] Migrating {label} nodes...")
             memgraph.execute(
                 f"""
-                CALL migrate.neo4j(
+                call migrate_neo4j_driver2.neo4j(
                     "MATCH (n:{label}) RETURN elementId(n) AS elementId, n.id AS id, properties(n) AS props",
                     {{host: "neo4j", port: 7687}}
                 ) YIELD row
@@ -175,7 +175,7 @@ def migrate_with_gqlalchemy():
             print(f"[Worker 1] Migrating {rel_type} relationships...")
             memgraph.execute(
                 f"""
-                CALL migrate.neo4j(
+                call migrate_neo4j_driver2.neo4j(
                     "MATCH (a)-[r:{rel_type}]->(b) RETURN elementId(a) AS from_elementId, elementId(b) AS to_elementId, properties(r) AS rel_props",
                     {{host: "neo4j", port: 7687}}
                 ) YIELD row

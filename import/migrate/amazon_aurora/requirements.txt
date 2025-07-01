@@ -1,0 +1,2 @@
+GQLAlchemy==1.7.0
+mysql-connector-python==8.2.0 
