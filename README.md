@@ -45,6 +45,7 @@ Deploy Memgraph using methods that suit your environment, whether it's container
 - [Docker deployment](./ha/docker_deployment/)
 - [Docker compose deployment](./ha/docker_compose_deployment/)
 - [Restoration of snapshosts on an HA cluster](./ha/k8s_restore_snapshot/)
+- [Helm upgrade of Memgraph version](./ha/k8s_upgrade_memgraph_version/)
 
 ### Import
 - [Importing data from Arrow Flight](./import/migrate/arrow-flight/)
