@@ -108,16 +108,20 @@ def migrate_with_gqlalchemy():
     try:
         print("[Worker 1] Connecting to Memgraph...")
         memgraph = Memgraph(host=MEMGRAPH_HOST, port=MEMGRAPH_PORT)
+        
+        def execute_query(query):
+            print(query)
+            memgraph.execute(query)
 
         print("[Worker 1] Setting storage mode and clearing graph...")
-        memgraph.execute("STORAGE MODE IN_MEMORY_ANALYTICAL")
-        memgraph.execute("DROP GRAPH")
+        execute_query("STORAGE MODE IN_MEMORY_ANALYTICAL")
+        execute_query("DROP GRAPH")
 
         print("[Worker 1] Creating __MigrationNode__ index on __elementId__...")
-        memgraph.execute("CREATE INDEX ON :__MigrationNode__(__elementId__)")
+        execute_query("CREATE INDEX ON :__MigrationNode__(__elementId__)")
 
         print("[Worker 1] Verifying Neo4j connectivity...")
-        memgraph.execute(
+        execute_query(
             """
             call migrate_neo4j_driver2.neo4j("RETURN 1;", {host: "neo4j", port: 7687}) YIELD row RETURN row;
             """
@@ -156,7 +160,7 @@ def migrate_with_gqlalchemy():
         # Migrate nodes for each discovered label with __elementId__
         for label in discovered_labels:
             print(f"[Worker 1] Migrating {label} nodes...")
-            memgraph.execute(
+            execute_query(
                 f"""
                 call migrate_neo4j_driver2.neo4j(
                     "MATCH (n:{label}) RETURN elementId(n) AS elementId, labels(n) as labels, properties(n) AS props",
@@ -174,7 +178,7 @@ def migrate_with_gqlalchemy():
         # Migrate relationships for each discovered type using __elementId__ for matching
         for rel_type in discovered_rel_types:
             print(f"[Worker 1] Migrating {rel_type} relationships...")
-            memgraph.execute(
+            execute_query(
                 f"""
                 call migrate_neo4j_driver2.neo4j(
                     "MATCH (a)-[r:{rel_type}]->(b) RETURN elementId(a) AS from_elementId, elementId(b) AS to_elementId, properties(r) AS rel_props",
