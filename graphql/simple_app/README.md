@@ -66,6 +66,7 @@ python3 query_graphql.py
 
 This example was built and tested with:
 - **Memgraph v3.4**
+- **Neo4j/GraphQL v7.2.0**
 - **Node.js v14 or higher**
 - **Python 3.8 or higher**
 
