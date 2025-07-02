@@ -48,6 +48,7 @@ python-dotenv==1.0.0
 1. First, start the GraphQL server:
 ```bash
 cd src
+npm install
 node index.js
 ```
 
@@ -64,7 +65,8 @@ python3 query_graphql.py
 ## 🔖 Version Compatibility
 
 This example was built and tested with:
-- **Memgraph v3.2**
+- **Memgraph v3.4**
+- **Neo4j/GraphQL v7.2.0**
 - **Node.js v14 or higher**
 - **Python 3.8 or higher**
 
