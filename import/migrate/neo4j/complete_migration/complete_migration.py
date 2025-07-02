@@ -159,11 +159,12 @@ def migrate_with_gqlalchemy():
             memgraph.execute(
                 f"""
                 call migrate_neo4j_driver2.neo4j(
-                    "MATCH (n:{label}) RETURN elementId(n) AS elementId, n.id AS id, properties(n) AS props",
+                    "MATCH (n:{label}) RETURN elementId(n) AS elementId, labels(n) as labels, properties(n) AS props",
                     {{host: "neo4j", port: 7687}}
                 ) YIELD row
                 MERGE (n:{label}:__MigrationNode__ {{__elementId__: row.elementId}})
-                SET n.id = row.id, n += row.props
+                SET n:row.labels
+                SET n += row.props
                 """
             )
             print(f"[Worker 1] Completed migration of {label} nodes")
