@@ -62,6 +62,9 @@ Deploy Memgraph using methods that suit your environment, whether it's container
 - [Memgraph Lab Enterprise Edition with remote storage deployment in Docker compose](./memgraph_lab/enterprise_lab_with_remote_storage_docker_compose/)
 - [Memgraph Lab Enterprise Edition with separate remote storage deployment in Docker compose](./memgraph_lab/enterprise_lab_with_separate_remote_storage_docker_compose/)
 
+### NeoDash
+- [Connect Memgraph with NeoDash](./neodash/)
+
 ### Python
 - [GQLAlchemy basic example of creating and reading nodes](./python/querying/creating_and_reading_nodes/)
 

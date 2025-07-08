@@ -1,0 +1,35 @@
+services:
+  memgraph:
+    image: memgraph/memgraph-mage:3.3
+    container_name: memgraph-mage
+    ports:
+      - "7687:7687"
+      - "7444:7444"
+      - "9091:9091"
+    command: ["--log-level=TRACE", "--also-log-to-stderr=true"]
+    volumes:
+      - memgraph_data:/var/lib/memgraph
+    networks:
+      - memgraph-network
+
+  neodash:
+    image: nielsdejong/neodash:2.4.10
+    container_name: neodash
+    ports:
+      - "5005:5005"
+    depends_on:
+      - memgraph
+    environment:
+      - NEO4J_URI=bolt://memgraph:7687
+      - NEO4J_USER=
+      - NEO4J_PASSWORD=
+      - NEO4J_DATABASE=memgraph
+    networks:
+      - memgraph-network
+
+volumes:
+  memgraph_data:
+
+networks:
+  memgraph-network:
+    driver: bridge 
