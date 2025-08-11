@@ -213,7 +213,7 @@ def migrate_with_gqlalchemy():
             CALL migrate_neo4j_driver2.neo4j("SHOW INDEXES", {host: "neo4j", port: 7687}) YIELD row RETURN row
             """
         ))
-        range_indexes_result = [x["row"] for x in indexes_result if x["row"]["type"] == "RANGE" and len(x["row"]["labelsOrTypes"]) == 1]
+        range_indexes_result = [x["row"] for x in indexes_result if x["row"]["type"] in ["RANGE", "TEXT"] and len(x["row"]["labelsOrTypes"]) == 1]
         for index in range_indexes_result:
             props = ",".join(index["properties"])
             label_or_type = index["labelsOrTypes"][0]
@@ -228,7 +228,7 @@ def migrate_with_gqlalchemy():
             props = ",".join(index["properties"])
             label_or_type = index["labelsOrTypes"][0]
             if index["entityType"] == "NODE":
-                memgraph.execute(f"CREATE TEXT INDEX {text_index_name} ON :{label_or_type}")
+                memgraph.execute(f"CREATE TEXT INDEX {text_index_name} ON :{label_or_type}({props})")
 
         print("[Worker 1] Completed migration of indices.")
 
