@@ -1,0 +1,28 @@
+{
+  "name": "apollo-express-app",
+  "version": "1.0.0",
+  "description": "GraphQL server using Apollo Server (Express v3) with @neo4j/graphql for Memgraph.",
+  "main": "index.js",
+  "license": "AGPL-version-3.0",
+  "private": false,
+  "engines": {
+    "node": ">= 14.0.0",
+    "npm": ">= 6.0.0"
+  },
+  "scripts": {
+    "dev": "node index.js",
+    "start": "node index.js",
+    "test": "echo \"No tests configured\" && exit 0"
+  },
+  "dependencies": {
+    "@apollo/server": "^4.12.2",
+    "@neo4j/graphql": "^5.12.6",
+    "apollo-server-express": "^3.13.0",
+    "dotenv": "^16.5.0",
+    "express": "^4.19.2",
+    "graphql": "^16.11.0",
+    "graphql-tag": "^2.12.6",
+    "jsonwebtoken": "^9.0.2",
+    "neo4j-driver": "^5.28.1"
+  }
+} 
