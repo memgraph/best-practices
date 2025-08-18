@@ -17,6 +17,8 @@ This repository holds examples to ease the use of Memgraph. It will be covering 
 
 ### 🟢 [Graph Modeling Best Practices](https://memgraph.com/docs/fundamentals/graph-modeling)
 
+Changed text to test branch protection rules
+
 Learn the tips & tricks on how to best model your data and what to look after before you decide to import it.
 
 ### :card_index_dividers: [Import Best Practices](./import/)
