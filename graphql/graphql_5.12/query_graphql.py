@@ -84,7 +84,7 @@ def query_devices_with_readings():
 
 def double_query():
     query = """
-    query Govno {
+    query Query {
         devices: devicesAggregate {
             count
             __typename
