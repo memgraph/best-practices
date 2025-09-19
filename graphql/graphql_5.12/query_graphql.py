@@ -81,19 +81,28 @@ def query_devices_with_readings():
     """
     
     result = execute_query(query)
-    if result and 'data' in result:
-        print("\nDevices with Readings Query Result:")
-        for device in result['data']['devices']:
-            print(f"\nDevice: {device['name']}")
-            print(f"Type: {device['type']}")
-            print(f"Power Consumption: {device['powerConsumption']} kW")
-            print(f"Status: {device['status']}")
-            print("Readings:")
-            for reading in device['readings']:
-                print(f"- {reading['value']} {reading['unit']}")
-    print("Done!")
+
+def double_query():
+    query = """
+    query Query {
+        devices: devicesAggregate {
+            count
+            __typename
+        }
+        readings: readingsAggregate {
+            count
+            __typename
+        }
+    }
+    """
+    
+    result = execute_query(query)
+    print(result)
+
 
 if __name__ == "__main__":
     print("Querying GraphQL server...")
     query_buildings()
-    query_devices_with_readings() 
+    query_devices_with_readings()
+    print("------------- Double query ---------------")
+    double_query()

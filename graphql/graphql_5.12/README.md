@@ -8,18 +8,13 @@ This app runs a GraphQL server using Apollo Server (Express v3) and `@neo4j/grap
 
 ```bash
 docker run -it --rm -p 7687:7687 \
-  memgraph/memgraph:3.4 \
+  memgraph/memgraph-mage:3.5 \
   --bolt-server-name-for-init=Neo4j/5.2.0 \
-  --query-callable-mappings-path=/etc/memgraph/apoc_compatibility_mappings.json
+  --query-callable-mappings-path=/etc/memgraph/apoc_compatibility_mappings.json \
+  --also-log-to-stderr=true --log-level=TRACE
 ```
 
 ## Setup
-1. Copy environment template and adjust values:
-```bash
-cp .env.example .env
-```
-
-2. Install dependencies:
 ```bash
 npm install
 ```
