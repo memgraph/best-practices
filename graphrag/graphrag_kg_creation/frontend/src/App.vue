@@ -82,6 +82,20 @@
 
       <div v-if="progress.length > 0" class="card progress-card" ref="progressCard">
         <h3>Progress</h3>
+        
+        <!-- Countdown Timer -->
+        <div v-if="(countdownSeconds > 0 || countdownTimer === 0) && !ingestionFinished" class="countdown-timer" :class="{ 'countdown-finished': countdownTimer === 0 }">
+          <div class="countdown-header">
+            <span class="countdown-label">⏱️ Estimated Time Remaining</span>
+            <span class="countdown-value" :class="{ 'countdown-warning': countdownTimer <= 10 && countdownTimer > 0 }">
+              {{ countdownTimer > 0 ? countdownTimer + ' seconds' : 'Finalizing...' }}
+            </span>
+          </div>
+          <div v-if="countdownTimer === 0" class="countdown-message">
+            Ingestion will finalize shortly. Please wait...
+          </div>
+        </div>
+        
         <div v-for="(item, index) in progress" :key="index" class="progress-item">
           <div class="progress-header">
             <span class="progress-url">{{ item.url }}</span>
@@ -142,11 +156,76 @@
       <div class="card">
         <div class="stats-header">
           <h2>Knowledge Graph Statistics</h2>
-          <button @click="fetchStats" :disabled="statsLoading" class="btn btn-primary refresh-btn">
-            {{ statsLoading ? 'Loading...' : 'Refresh' }}
-          </button>
+          <div class="header-buttons">
+            <button @click="testMCPConnection" :disabled="mcpTesting" class="btn btn-secondary">
+              {{ mcpTesting ? 'Testing...' : 'Test MCP Connection' }}
+            </button>
+            <button @click="fetchStats" :disabled="statsLoading" class="btn btn-primary refresh-btn">
+              {{ statsLoading ? 'Loading...' : 'Refresh' }}
+            </button>
+          </div>
         </div>
         
+        <div v-if="mcpTestResult" class="mcp-test-result" :class="mcpTestResult.status">
+          <div class="mcp-test-header">
+            <strong>MCP Connection Test</strong>
+            <span class="mcp-test-status">{{ mcpTestResult.status === 'success' ? '✓ Connected' : '✗ Failed' }}</span>
+          </div>
+          <div v-if="mcpTestResult.status === 'success'" class="mcp-test-details">
+            <p><strong>URL:</strong> {{ mcpTestResult.mcp_url }}</p>
+            <p><strong>Status:</strong> {{ mcpTestResult.status }}</p>
+            
+            <!-- Schema Display -->
+            <div v-if="mcpTestResult.schema" class="schema-display">
+              <h4>📋 Graph Schema</h4>
+              <div v-if="mcpTestResult.schema.nodeLabels && mcpTestResult.schema.nodeLabels.length > 0" class="schema-section">
+                <h5>Node Labels ({{ mcpTestResult.schema.nodeLabels.length }})</h5>
+                <div class="schema-tags">
+                  <span v-for="label in mcpTestResult.schema.nodeLabels" :key="label" class="schema-tag node-tag">
+                    {{ label }}
+                  </span>
+                </div>
+              </div>
+              
+              <div v-if="mcpTestResult.schema.relationshipTypes && mcpTestResult.schema.relationshipTypes.length > 0" class="schema-section">
+                <h5>Relationship Types ({{ mcpTestResult.schema.relationshipTypes.length }})</h5>
+                <div class="schema-tags">
+                  <span v-for="relType in mcpTestResult.schema.relationshipTypes" :key="relType" class="schema-tag rel-tag">
+                    {{ relType }}
+                  </span>
+                </div>
+              </div>
+              
+              <div v-if="mcpTestResult.schema.properties && Object.keys(mcpTestResult.schema.properties).length > 0" class="schema-section">
+                <h5>Properties</h5>
+                <div class="properties-list">
+                  <div v-for="(props, label) in mcpTestResult.schema.properties" :key="label" class="property-group">
+                    <strong class="property-label">{{ label }}:</strong>
+                    <span v-for="prop in props" :key="prop" class="schema-tag prop-tag">
+                      {{ prop }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+              
+              <details v-if="mcpTestResult.mcp_response" class="mcp-response-details">
+                <summary>Raw MCP Response</summary>
+                <pre>{{ JSON.stringify(mcpTestResult.mcp_response, null, 2) }}</pre>
+              </details>
+            </div>
+            
+            <div v-else-if="mcpTestResult.mcp_response" class="mcp-response-fallback">
+              <details class="mcp-response-details">
+                <summary>MCP Response</summary>
+                <pre>{{ JSON.stringify(mcpTestResult.mcp_response, null, 2) }}</pre>
+              </details>
+            </div>
+          </div>
+          <div v-else class="mcp-test-error">
+            <p><strong>Error:</strong> {{ mcpTestResult.error }}</p>
+          </div>
+        </div>
+
         <div v-if="statsError" class="message error">
           <p>{{ statsError }}</p>
         </div>
@@ -222,7 +301,13 @@ export default {
       chatMessages: [],
       stats: null,
       statsLoading: false,
-      statsError: ''
+      statsError: '',
+      mcpTesting: false,
+      mcpTestResult: null,
+      countdownTimer: null,
+      countdownSeconds: 0,
+      countdownInterval: null,
+      ingestionFinished: false
     }
   },
   mounted() {
@@ -232,6 +317,12 @@ export default {
         this.fetchStats()
       }
     })
+  },
+  beforeUnmount() {
+    // Clean up countdown interval when component is destroyed
+    if (this.countdownInterval) {
+      clearInterval(this.countdownInterval)
+    }
   },
   watch: {
     urls: {
@@ -294,6 +385,13 @@ export default {
       this.status = ''
       this.messageType = ''
       this.progress = []
+      
+      // Clear any existing countdown timer
+      if (this.countdownInterval) {
+        clearInterval(this.countdownInterval)
+        this.countdownInterval = null
+      }
+      this.ingestionFinished = false
 
       const urlList = this.urls
         .split('\n')
@@ -305,6 +403,28 @@ export default {
         this.messageType = 'error'
         this.loading = false
         return
+      }
+
+      // Calculate total estimated time and start countdown
+      let totalEstimatedSeconds = 0
+      if (this.estimate && this.estimate.total_estimated_time_seconds) {
+        totalEstimatedSeconds = Math.ceil(this.estimate.total_estimated_time_seconds)
+      } else {
+        // Fallback: calculate from chunk count (10 seconds per chunk)
+        const estimateMap = {}
+        if (this.estimate) {
+          this.estimate.documents.forEach(doc => {
+            estimateMap[doc.url] = doc.chunk_count
+            totalEstimatedSeconds += doc.chunk_count * 10
+          })
+        }
+      }
+      
+      // Start countdown timer
+      if (totalEstimatedSeconds > 0) {
+        this.countdownTimer = totalEstimatedSeconds
+        this.countdownSeconds = totalEstimatedSeconds
+        this.startCountdown()
       }
 
       // Initialize progress tracking
@@ -365,6 +485,14 @@ export default {
             this.status = JSON.stringify(error.response.data, null, 2)
           }
           
+          // Stop countdown timer on error
+          if (this.countdownInterval) {
+            clearInterval(this.countdownInterval)
+            this.countdownInterval = null
+          }
+          this.countdownTimer = null
+          this.ingestionFinished = false
+          
           // Scroll to show error
           this.$nextTick(() => {
             this.scrollToProgress()
@@ -378,9 +506,31 @@ export default {
       if (this.progress.every(p => p.status === 'completed')) {
         this.message = `Successfully ingested ${urlList.length} document(s)!`
         this.messageType = 'success'
+        // Stop countdown timer and mark as finished
+        if (this.countdownInterval) {
+          clearInterval(this.countdownInterval)
+          this.countdownInterval = null
+        }
+        this.ingestionFinished = true
       }
 
       this.loading = false
+    },
+    startCountdown() {
+      // Clear any existing interval
+      if (this.countdownInterval) {
+        clearInterval(this.countdownInterval)
+      }
+      
+      // Update countdown every second
+      this.countdownInterval = setInterval(() => {
+        if (this.countdownTimer > 0) {
+          this.countdownTimer--
+        } else {
+          // Timer reached 0, keep it at 0 to show "Finalizing..." message
+          this.countdownTimer = 0
+        }
+      }, 1000)
     },
     async askQuestion() {
       if (!this.question.trim() || this.chatLoading) {
@@ -451,6 +601,127 @@ export default {
     formatNumber(num) {
       if (num === null || num === undefined) return '0'
       return num.toLocaleString()
+    },
+    async testMCPConnection() {
+      this.mcpTesting = true
+      this.mcpTestResult = null
+      try {
+        const response = await axios.get('/api/mcp/test')
+        const mcpResponse = response.data.mcp_response
+        
+        // Extract schema from MCP response
+        let schema = null
+        if (mcpResponse && mcpResponse.result && mcpResponse.result.content) {
+          const content = mcpResponse.result.content
+          // Content is typically an array of objects from get_schema tool
+          if (Array.isArray(content) && content.length > 0) {
+            // Parse schema information from the content
+            schema = this.parseSchemaFromContent(content)
+          }
+        }
+        
+        this.mcpTestResult = {
+          status: 'success',
+          mcp_url: response.data.mcp_url,
+          mcp_response: mcpResponse,
+          schema: schema
+        }
+      } catch (error) {
+        this.mcpTestResult = {
+          status: 'error',
+          error: error.response?.data?.detail || error.message || 'Failed to connect to MCP service'
+        }
+      } finally {
+        this.mcpTesting = false
+      }
+    },
+    parseSchemaFromContent(content) {
+      // Parse the schema content returned by get_schema tool
+      // Format from SHOW SCHEMA INFO: [("node"/"relationship", "LabelName"/"RelType", {properties}), ...]
+      const schema = {
+        nodeLabels: [],
+        relationshipTypes: [],
+        properties: {}
+      }
+      
+      if (!Array.isArray(content)) {
+        return schema
+      }
+      
+      content.forEach(item => {
+        // Handle tuple format: ["node", "LabelName", {"prop": "type", ...}]
+        if (Array.isArray(item) && item.length >= 2) {
+          const elementType = item[0] // "node" or "relationship"
+          const elementName = item[1] // label or relationship type
+          const properties = item[2] || {} // properties dict
+          
+          if (elementType === 'node') {
+            if (!schema.nodeLabels.includes(elementName)) {
+              schema.nodeLabels.push(elementName)
+            }
+            if (properties && typeof properties === 'object') {
+              if (!schema.properties[elementName]) {
+                schema.properties[elementName] = []
+              }
+              const propKeys = Object.keys(properties)
+              propKeys.forEach(prop => {
+                if (!schema.properties[elementName].includes(prop)) {
+                  schema.properties[elementName].push(prop)
+                }
+              })
+            }
+          } else if (elementType === 'relationship') {
+            if (!schema.relationshipTypes.includes(elementName)) {
+              schema.relationshipTypes.push(elementName)
+            }
+          }
+        }
+        // Handle object format: {element_type: "node", element_name: "Label", properties: {...}}
+        else if (typeof item === 'object' && item !== null) {
+          const elementType = item.element_type || item.type
+          const elementName = item.element_name || item.name || item.label
+          const properties = item.properties || {}
+          
+          if (elementType === 'node' || item.node_labels) {
+            const labels = item.node_labels || (elementName ? [elementName] : [])
+            labels.forEach(label => {
+              if (!schema.nodeLabels.includes(label)) {
+                schema.nodeLabels.push(label)
+              }
+              if (properties && typeof properties === 'object') {
+                if (!schema.properties[label]) {
+                  schema.properties[label] = []
+                }
+                const propKeys = Array.isArray(properties) ? properties : Object.keys(properties)
+                propKeys.forEach(prop => {
+                  const propName = typeof prop === 'string' ? prop : (prop.key || prop.name || prop)
+                  if (propName && !schema.properties[label].includes(propName)) {
+                    schema.properties[label].push(propName)
+                  }
+                })
+              }
+            })
+          }
+          
+          if (elementType === 'relationship' || item.relationship_types) {
+            const relTypes = item.relationship_types || (elementName ? [elementName] : [])
+            relTypes.forEach(relType => {
+              if (!schema.relationshipTypes.includes(relType)) {
+                schema.relationshipTypes.push(relType)
+              }
+            })
+          }
+        }
+      })
+      
+      // Sort for better display
+      schema.nodeLabels.sort()
+      schema.relationshipTypes.sort()
+      Object.keys(schema.properties).forEach(label => {
+        schema.properties[label].sort()
+      })
+      
+      return schema
     }
   }
 }
@@ -989,6 +1260,265 @@ export default {
   padding: 60px 20px;
   color: #6c757d;
   font-size: 16px;
+}
+
+.header-buttons {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.btn-secondary {
+  background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
+  color: white;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(108, 117, 125, 0.4);
+}
+
+.btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.mcp-test-result {
+  margin-bottom: 30px;
+  padding: 20px;
+  border-radius: 8px;
+  border: 2px solid;
+}
+
+.mcp-test-result.success {
+  background: #f0f4f8;
+  border-color: #4a90e2;
+}
+
+.mcp-test-result.error {
+  background: #fff5f5;
+  border-color: #ef4444;
+}
+
+.mcp-test-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  font-size: 16px;
+}
+
+.mcp-test-status {
+  font-weight: 600;
+  padding: 4px 12px;
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+.mcp-test-result.success .mcp-test-status {
+  background: #e8f5e9;
+  color: #388e3c;
+}
+
+.mcp-test-result.error .mcp-test-status {
+  background: #ffebee;
+  color: #d32f2f;
+}
+
+.mcp-test-details {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 14px;
+  color: #495057;
+}
+
+.mcp-test-details p {
+  margin: 0;
+}
+
+.mcp-test-error {
+  color: #d32f2f;
+  font-size: 14px;
+}
+
+.mcp-test-error p {
+  margin: 0;
+}
+
+.mcp-response-details {
+  margin-top: 12px;
+}
+
+.mcp-response-details summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: #4a90e2;
+  margin-bottom: 8px;
+}
+
+.mcp-response-details summary:hover {
+  text-decoration: underline;
+}
+
+.mcp-response-details pre {
+  background: #1a1a2e;
+  color: #f8f9fa;
+  padding: 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.5;
+  border: 1px solid #e9ecef;
+  margin-top: 8px;
+}
+
+.schema-display {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e9ecef;
+}
+
+.schema-display h4 {
+  margin: 0 0 16px 0;
+  color: #1a1a2e;
+  font-size: 18px;
+}
+
+.schema-section {
+  margin-bottom: 20px;
+}
+
+.schema-section h5 {
+  margin: 0 0 12px 0;
+  color: #495057;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.schema-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.schema-tag {
+  display: inline-block;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid;
+}
+
+.node-tag {
+  background: #e3f2fd;
+  color: #1976d2;
+  border-color: #90caf9;
+}
+
+.rel-tag {
+  background: #f3e5f5;
+  color: #7b1fa2;
+  border-color: #ce93d8;
+}
+
+.prop-tag {
+  background: #fff3e0;
+  color: #e65100;
+  border-color: #ffb74d;
+  font-size: 12px;
+}
+
+.properties-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.property-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.property-label {
+  color: #495057;
+  font-size: 14px;
+  min-width: 120px;
+}
+
+.mcp-response-fallback {
+  margin-top: 16px;
+}
+
+.countdown-timer {
+  background: linear-gradient(135deg, #e3f2fd 0%, #f0f4f8 100%);
+  border: 2px solid #4a90e2;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 20px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.countdown-timer.countdown-finished {
+  background: linear-gradient(135deg, #fff3e0 0%, #fff8f0 100%);
+  border-color: #ff9800;
+  animation: none;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(74, 144, 226, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(74, 144, 226, 0);
+  }
+}
+
+.countdown-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.countdown-label {
+  font-weight: 600;
+  color: #1a1a2e;
+  font-size: 14px;
+}
+
+.countdown-value {
+  font-size: 24px;
+  font-weight: 700;
+  color: #4a90e2;
+  font-variant-numeric: tabular-nums;
+}
+
+.countdown-value.countdown-warning {
+  color: #ff9800;
+  animation: blink 1s ease-in-out infinite;
+}
+
+@keyframes blink {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.countdown-message {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #ff9800;
+  color: #e65100;
+  font-weight: 500;
+  font-size: 14px;
+  text-align: center;
 }
 </style>
 

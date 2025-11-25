@@ -5,7 +5,7 @@ services:
     ports:
       - "7687:7687"
       - "7444:7444"
-    command: ["--log-level=INFO", "--also-log-to-stderr=true", "--schema-info-enabled=true"]
+    command: ["--log-level=TRACE", "--also-log-to-stderr=true", "--schema-info-enabled=true"]
     healthcheck:
       test: ["CMD", "python3", "-c", "import socket; s = socket.socket(); s.settimeout(1); result = s.connect_ex(('localhost', 7687)); s.close(); exit(0 if result == 0 else 1)"]
       interval: 5s
