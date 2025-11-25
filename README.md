@@ -38,6 +38,9 @@ Deploy Memgraph using methods that suit your environment, whether it's container
 ### Debugging
 - [Generating a core dump with Memgraph in Docker Compose](./debugging/docker_compose_with_core_dump_generation/)
 
+### GraphRAG
+- [Knowledge graph creation with Unstructured2Graph and MCP Server](./graphrag/graphrag_kg_creation/)
+
 ### GraphQL
 - [Simple application with Memgraph and Neo4j GraphQL](./graphql/simple_app/)
 
