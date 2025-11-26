@@ -258,6 +258,47 @@ RETURN dst LIMIT 5</pre>
                     <span class="message-time">{{ message.time }}</span>
                   </div>
                   <div class="message-text">{{ message.text }}</div>
+                  <div v-if="message.tools_used && message.tools_used.length > 0" class="tools-used">
+                    <div class="tools-used-header">
+                      <strong>Tools Used:</strong>
+                    </div>
+                    <div v-for="(tool, toolIndex) in message.tools_used" :key="toolIndex" class="tool-item">
+                      <span class="tool-name">{{ tool.name }}</span>
+                      <details v-if="tool.arguments" class="tool-arguments">
+                        <summary>Arguments</summary>
+                        <pre>{{ JSON.stringify(tool.arguments, null, 2) }}</pre>
+                      </details>
+                    </div>
+                  </div>
+                  <div v-if="message.conversation_history && message.conversation_history.length > 0" class="conversation-history-section">
+                    <button 
+                      @click="toggleConversationHistory(index)" 
+                      class="btn-conversation-history"
+                      :class="{ 'active': showConversationHistoryFor === index }"
+                    >
+                      {{ showConversationHistoryFor === index ? '▼' : '▶' }} Conversation History
+                    </button>
+                    <div v-if="showConversationHistoryFor === index" class="conversation-history-content">
+                      <div v-for="(entry, entryIndex) in message.conversation_history" :key="entryIndex" :class="['conversation-entry', `conversation-entry-${entry.role}`, `conversation-entry-${entry.type}`]">
+                        <div class="conversation-entry-header">
+                          <span class="conversation-entry-role">{{ entry.role === 'user' ? '👤 User' : entry.role === 'assistant' ? '🤖 Assistant' : '🔧 Tool' }}</span>
+                          <span class="conversation-entry-type">{{ entry.type }}</span>
+                        </div>
+                        <div v-if="entry.type === 'tool_call'" class="conversation-entry-body">
+                          <div class="tool-call-info">
+                            <strong>Tool:</strong> {{ entry.tool_name }}
+                            <details v-if="entry.arguments" class="tool-arguments">
+                              <summary>Arguments</summary>
+                              <pre>{{ JSON.stringify(entry.arguments, null, 2) }}</pre>
+                            </details>
+                          </div>
+                        </div>
+                        <div v-else class="conversation-entry-body">
+                          <pre class="conversation-entry-content">{{ entry.content }}</pre>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <div v-if="message.type === 'user'" class="message-avatar user-avatar">
                   <div class="avatar-placeholder">You</div>
@@ -581,6 +622,7 @@ export default {
       openaiAgentsQuestion: '',
       openaiAgentsLoading: false,
       openaiAgentsMessages: [],
+      showConversationHistoryFor: null,
       chatFullscreen: false,
       openaiAgentsFullscreen: false,
       stats: null,
@@ -916,6 +958,13 @@ export default {
         document.body.style.overflow = ''
       }
     },
+    toggleConversationHistory(index) {
+      if (this.showConversationHistoryFor === index) {
+        this.showConversationHistoryFor = null
+      } else {
+        this.showConversationHistoryFor = index
+      }
+    },
     async askOpenAIAgent() {
       if (!this.openaiAgentsQuestion.trim() || this.openaiAgentsLoading) {
         return
@@ -956,7 +1005,9 @@ export default {
         const agentMessage = {
           type: 'bot',
           text: response.data.answer || 'No answer provided.',
-          time: new Date().toLocaleTimeString()
+          time: new Date().toLocaleTimeString(),
+          tools_used: response.data.tools_used || [],
+          conversation_history: response.data.conversation_history || []
         }
         this.openaiAgentsMessages.push(agentMessage)
       } catch (error) {
@@ -1964,6 +2015,168 @@ export default {
   line-height: 1.5;
   white-space: pre-wrap;
   word-wrap: break-word;
+}
+
+.tools-used {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.tools-used-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4a90e2;
+  margin-bottom: 8px;
+}
+
+.tool-item {
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 3px solid #4a90e2;
+}
+
+.tool-name {
+  font-weight: 600;
+  color: #1a1a2e;
+  font-size: 13px;
+}
+
+.tool-arguments {
+  margin-top: 6px;
+}
+
+.tool-arguments summary {
+  font-size: 12px;
+  color: #6c757d;
+  cursor: pointer;
+  user-select: none;
+}
+
+.tool-arguments summary:hover {
+  color: #4a90e2;
+}
+
+.tool-arguments pre {
+  margin-top: 6px;
+  padding: 8px;
+  background: white;
+  border-radius: 4px;
+  font-size: 11px;
+  overflow-x: auto;
+  border: 1px solid #dee2e6;
+}
+
+.conversation-history-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.btn-conversation-history {
+  padding: 6px 12px;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4a90e2;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-conversation-history:hover {
+  background: #e9ecef;
+  border-color: #4a90e2;
+}
+
+.btn-conversation-history.active {
+  background: #4a90e2;
+  color: white;
+  border-color: #4a90e2;
+}
+
+.conversation-history-content {
+  margin-top: 12px;
+  max-height: 500px;
+  overflow-y: auto;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f8f9fa;
+}
+
+.conversation-entry {
+  margin-bottom: 12px;
+  padding: 10px;
+  background: white;
+  border-radius: 6px;
+  border-left: 3px solid #dee2e6;
+}
+
+.conversation-entry-user {
+  border-left-color: #4a90e2;
+}
+
+.conversation-entry-assistant {
+  border-left-color: #28a745;
+}
+
+.conversation-entry-tool {
+  border-left-color: #ffc107;
+}
+
+.conversation-entry-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.conversation-entry-role {
+  color: #495057;
+}
+
+.conversation-entry-type {
+  padding: 2px 8px;
+  background: #e9ecef;
+  border-radius: 4px;
+  color: #6c757d;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.conversation-entry-body {
+  margin-top: 8px;
+}
+
+.conversation-entry-content {
+  margin: 0;
+  padding: 8px;
+  background: #f8f9fa;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-x: auto;
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.tool-call-info {
+  font-size: 12px;
+}
+
+.tool-call-info strong {
+  color: #495057;
 }
 
 .chat-form {

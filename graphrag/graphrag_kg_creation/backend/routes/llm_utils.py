@@ -6,33 +6,9 @@ import json
 import logging
 from typing import Any, Optional
 from openai import OpenAI
+from .prompts import SYSTEM_MESSAGE, create_user_message
 
 logger = logging.getLogger(__name__)
-
-# Prompt templates
-SYSTEM_MESSAGE = """You are a helpful assistant that answers questions based on the provided context.
-Use only the information from the context to answer the question.
-If the context doesn't contain enough information to answer the question, say so."""
-
-
-def create_user_message(context: str, question: str) -> str:
-    """
-    Create a user message prompt with context and question.
-    
-    Args:
-        context: The context text to use for answering
-        question: The question to answer
-        
-    Returns:
-        Formatted user message string
-    """
-    return f"""Based on the following context, please answer the question.
-
-Context: {context}
-
-Question: {question}
-
-Answer:"""
 
 
 def generate_answer(
