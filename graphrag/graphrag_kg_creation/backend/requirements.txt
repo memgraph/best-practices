@@ -2,6 +2,7 @@ fastapi==0.109.0
 uvicorn[standard]>=0.31.1
 python-dotenv>=1.1.1
 httpx>=0.28.1
+openai-agents==0.6.1
 
 # AI Toolkit dependencies
 lightrag-hku[api]==1.4.8.2

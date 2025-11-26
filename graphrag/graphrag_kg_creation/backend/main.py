@@ -45,6 +45,13 @@ app.include_router(query.router)
 app.include_router(stats.router)
 app.include_router(mcp.router)
 
+# Import OpenAI Agents router if available (requires openai-agents package)
+try:
+    from routes import openai_agents
+    app.include_router(openai_agents.router)
+except ImportError:
+    logger.warning("OpenAI Agents router not available. Install openai-agents package to enable.")
+
 
 @app.get("/")
 async def root():

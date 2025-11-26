@@ -16,16 +16,22 @@
         Document Ingestion
       </button>
       <button 
-        @click="activeTab = 'chat'" 
-        :class="['tab-button', { active: activeTab === 'chat' }]"
+        @click="activeTab = 'retrieval'" 
+        :class="['tab-button', { active: activeTab === 'retrieval' }]"
       >
-        Graph Retrieval
+        Retrieval
       </button>
       <button 
         @click="activeTab = 'stats'" 
         :class="['tab-button', { active: activeTab === 'stats' }]"
       >
         Stats
+      </button>
+      <button 
+        @click="activeTab = 'mcp'" 
+        :class="['tab-button', { active: activeTab === 'mcp' }]"
+      >
+        MCP
       </button>
     </div>
 
@@ -121,34 +127,172 @@
       </div>
     </main>
 
-    <main class="main-content chat-content" v-if="activeTab === 'chat'">
-      <div class="card chat-card">
-        <h2>Ask a Question</h2>
-        <div class="chat-messages" ref="chatMessages">
-          <div v-for="(message, index) in chatMessages" :key="index" :class="['chat-message', message.type]">
-            <div class="message-content">
-              <div class="message-header">
-                <strong>{{ message.type === 'user' ? 'You' : 'Graph' }}</strong>
-                <span class="message-time">{{ message.time }}</span>
+    <main class="main-content retrieval-content" v-if="activeTab === 'retrieval'">
+      <div class="retrieval-layout">
+        <div class="retrieval-sidebar">
+          <h2>Retrieval Methods</h2>
+          <div class="retrieval-tabs-vertical">
+            <div class="retrieval-tab-wrapper">
+              <button 
+                @click="activeRetrievalMethod = 'vector-expansion'" 
+                :class="['retrieval-tab-button-vertical', { active: activeRetrievalMethod === 'vector-expansion' }]"
+              >
+                Vector Search + Expansion
+              </button>
+              <div class="method-tooltip">
+                <div class="method-description-tooltip">
+                  <h3>Vector Search + Expansion</h3>
+                  <p class="method-summary">
+                    Embeds your question, finds the top-k most similar chunks via vector search, then expands through the graph using BFS and ranks results by node degree.
+                  </p>
+                  <div class="query-display">
+                    <strong>Query:</strong>
+                    <pre class="query-code">CALL embeddings.text(['{question}']) YIELD embeddings, success
+CALL vector_search.search('vs_name', 5, embeddings[0]) YIELD distance, node, similarity
+MATCH (node)-[r*bfs]-(dst:Chunk)
+WITH DISTINCT dst, degree(dst) AS degree ORDER BY degree DESC
+RETURN dst LIMIT 5</pre>
+                  </div>
+                </div>
               </div>
-              <div class="message-text">{{ message.text }}</div>
+            </div>
+            <div class="retrieval-tab-wrapper">
+              <button 
+                @click="activeRetrievalMethod = 'openai-agents'" 
+                :class="['retrieval-tab-button-vertical', { active: activeRetrievalMethod === 'openai-agents' }]"
+              >
+                OpenAI Agents
+              </button>
+              <div class="method-tooltip">
+                <div class="method-description-tooltip">
+                  <h3>OpenAI Agents</h3>
+                  <p class="method-summary">
+                    Uses OpenAI Agents SDK with MCP (Model Context Protocol) to automatically select and execute tools from the MCP server. The agent intelligently chooses which tools to use based on your question.
+                  </p>
+                  <div class="query-display">
+                    <strong>How it works:</strong>
+                    <ul class="method-features" style="margin-top: 12px;">
+                      <li>The agent connects to the MCP server via HTTP with SSE transport</li>
+                      <li>It automatically discovers available tools from the MCP server</li>
+                      <li>Based on your question, it selects and executes the appropriate tools</li>
+                      <li>Returns a natural language answer based on the tool results</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
-        <form @submit.prevent="askQuestion" class="chat-form">
-          <div class="chat-input-container">
-            <textarea
-              v-model="question"
-              placeholder="Ask a question about the knowledge graph..."
-              class="chat-input"
-              rows="2"
-              :disabled="chatLoading"
-            ></textarea>
-            <button type="submit" :disabled="chatLoading || !question.trim()" class="btn btn-primary chat-send-btn">
-              {{ chatLoading ? 'Sending...' : 'Send' }}
-            </button>
+        
+        <div class="retrieval-main-content">
+          <div v-if="activeRetrievalMethod === 'vector-expansion'" class="retrieval-method-content">
+          <div class="card chat-card" :class="{ 'chat-fullscreen': chatFullscreen }">
+            <div class="chat-header">
+              <h3>Ask a Question</h3>
+              <button @click="toggleChatFullscreen" class="btn-icon" :title="chatFullscreen ? 'Exit Fullscreen' : 'Fullscreen'">
+                {{ chatFullscreen ? '⤓' : '⛶' }}
+              </button>
+            </div>
+            <div class="chat-messages" ref="chatMessages">
+              <div v-for="(message, index) in chatMessages" :key="index" :class="['chat-message', message.type]">
+                <div v-if="message.type === 'bot'" class="message-avatar bot-avatar">
+                  <img src="https://avatars.githubusercontent.com/u/17707542?s=400&u=fda65e728ea4d5328bdc339ae13fdee45fd6b71e&v=4" alt="Memgraph" />
+                </div>
+                <div class="message-content">
+                  <div class="message-header">
+                    <strong>{{ message.type === 'user' ? 'You' : 'Memgraph' }}</strong>
+                    <span class="message-time">{{ message.time }}</span>
+                  </div>
+                  <div class="message-text">{{ message.text }}</div>
+                </div>
+                <div v-if="message.type === 'user'" class="message-avatar user-avatar">
+                  <div class="avatar-placeholder">You</div>
+                </div>
+              </div>
+              <div v-if="chatLoading" class="chat-message bot typing-indicator">
+                <div class="message-avatar bot-avatar">
+                  <img src="https://avatars.githubusercontent.com/u/17707542?s=400&u=fda65e728ea4d5328bdc339ae13fdee45fd6b71e&v=4" alt="Memgraph" />
+                </div>
+                <div class="message-content typing-content">
+                  <div class="typing-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <form @submit.prevent="askQuestion" class="chat-form">
+              <div class="chat-input-container">
+                <textarea
+                  v-model="question"
+                  placeholder="Ask a question about the knowledge graph..."
+                  class="chat-input"
+                  rows="2"
+                  :disabled="chatLoading"
+                ></textarea>
+                <button type="submit" :disabled="chatLoading || !question.trim()" class="btn btn-primary chat-send-btn">
+                  {{ chatLoading ? 'Sending...' : 'Send' }}
+                </button>
+              </div>
+            </form>
           </div>
-        </form>
+        </div>
+
+        <div v-if="activeRetrievalMethod === 'openai-agents'" class="retrieval-method-content">
+          <div class="card chat-card" :class="{ 'chat-fullscreen': openaiAgentsFullscreen }">
+            <div class="chat-header">
+              <h3>Ask a Question</h3>
+              <button @click="toggleOpenAIAgentsFullscreen" class="btn-icon" :title="openaiAgentsFullscreen ? 'Exit Fullscreen' : 'Fullscreen'">
+                {{ openaiAgentsFullscreen ? '⤓' : '⛶' }}
+              </button>
+            </div>
+            <div class="chat-messages" ref="openaiAgentsChatMessages">
+              <div v-for="(message, index) in openaiAgentsMessages" :key="index" :class="['chat-message', message.type]">
+                <div v-if="message.type === 'bot'" class="message-avatar bot-avatar">
+                  <img src="https://avatars.githubusercontent.com/u/17707542?s=400&u=fda65e728ea4d5328bdc339ae13fdee45fd6b71e&v=4" alt="Memgraph" />
+                </div>
+                <div class="message-content">
+                  <div class="message-header">
+                    <strong>{{ message.type === 'user' ? 'You' : 'Memgraph Agent' }}</strong>
+                    <span class="message-time">{{ message.time }}</span>
+                  </div>
+                  <div class="message-text">{{ message.text }}</div>
+                </div>
+                <div v-if="message.type === 'user'" class="message-avatar user-avatar">
+                  <div class="avatar-placeholder">You</div>
+                </div>
+              </div>
+              <div v-if="openaiAgentsLoading" class="chat-message bot typing-indicator">
+                <div class="message-avatar bot-avatar">
+                  <img src="https://avatars.githubusercontent.com/u/17707542?s=400&u=fda65e728ea4d5328bdc339ae13fdee45fd6b71e&v=4" alt="Memgraph" />
+                </div>
+                <div class="message-content typing-content">
+                  <div class="typing-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <form @submit.prevent="askOpenAIAgent" class="chat-form">
+              <div class="chat-input-container">
+                <textarea
+                  v-model="openaiAgentsQuestion"
+                  placeholder="Ask a question about the knowledge graph..."
+                  class="chat-input"
+                  rows="2"
+                  :disabled="openaiAgentsLoading"
+                ></textarea>
+                <button type="submit" :disabled="openaiAgentsLoading || !openaiAgentsQuestion.trim()" class="btn btn-primary chat-send-btn">
+                  {{ openaiAgentsLoading ? 'Sending...' : 'Send' }}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+        </div>
       </div>
     </main>
 
@@ -157,11 +301,70 @@
         <div class="stats-header">
           <h2>Knowledge Graph Statistics</h2>
           <div class="header-buttons">
-            <button @click="testMCPConnection" :disabled="mcpTesting" class="btn btn-secondary">
-              {{ mcpTesting ? 'Testing...' : 'Test MCP Connection' }}
-            </button>
             <button @click="fetchStats" :disabled="statsLoading" class="btn btn-primary refresh-btn">
               {{ statsLoading ? 'Loading...' : 'Refresh' }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="statsError" class="message error">
+          <p>{{ statsError }}</p>
+        </div>
+
+        <div v-if="stats && !statsLoading" class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-icon">📄</div>
+            <div class="stat-content">
+              <div class="stat-label">Chunks</div>
+              <div class="stat-value">{{ formatNumber(stats.chunks) }}</div>
+              <div class="stat-description">Document chunks in the graph</div>
+            </div>
+          </div>
+          
+          <div class="stat-card">
+            <div class="stat-icon">🔗</div>
+            <div class="stat-content">
+              <div class="stat-label">Entities</div>
+              <div class="stat-value">{{ formatNumber(stats.entities) }}</div>
+              <div class="stat-description">Knowledge graph entities</div>
+            </div>
+          </div>
+          
+          <div class="stat-card">
+            <div class="stat-icon">🔀</div>
+            <div class="stat-content">
+              <div class="stat-label">Relationships</div>
+              <div class="stat-value">{{ formatNumber(stats.relationships) }}</div>
+              <div class="stat-description">Connections between nodes</div>
+            </div>
+          </div>
+          
+          <div class="stat-card">
+            <div class="stat-icon">📊</div>
+            <div class="stat-content">
+              <div class="stat-label">Total Nodes</div>
+              <div class="stat-value">{{ formatNumber(stats.nodes) }}</div>
+              <div class="stat-description">All nodes in the knowledge graph</div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="!stats && !statsLoading && !statsError" class="stats-empty">
+          <p>Click "Refresh" to load statistics from the knowledge graph.</p>
+        </div>
+      </div>
+    </main>
+
+    <main class="main-content" v-if="activeTab === 'mcp'">
+      <div class="card">
+        <div class="stats-header">
+          <h2>MCP Server</h2>
+          <div class="header-buttons">
+            <button @click="testMCPConnection" :disabled="mcpTesting" class="btn btn-secondary">
+              {{ mcpTesting ? 'Testing...' : 'Test Connection' }}
+            </button>
+            <button @click="listMCPTools" :disabled="toolsLoading" class="btn btn-primary">
+              {{ toolsLoading ? 'Loading...' : 'List Tools' }}
             </button>
           </div>
         </div>
@@ -226,50 +429,125 @@
           </div>
         </div>
 
-        <div v-if="statsError" class="message error">
-          <p>{{ statsError }}</p>
+        <div v-if="toolsError" class="message error">
+          <p>{{ toolsError }}</p>
         </div>
 
-        <div v-if="stats && !statsLoading" class="stats-grid">
-          <div class="stat-card">
-            <div class="stat-icon">📄</div>
-            <div class="stat-content">
-              <div class="stat-label">Chunks</div>
-              <div class="stat-value">{{ formatNumber(stats.chunks) }}</div>
-              <div class="stat-description">Document chunks in the graph</div>
-            </div>
-          </div>
-          
-          <div class="stat-card">
-            <div class="stat-icon">🔗</div>
-            <div class="stat-content">
-              <div class="stat-label">Entities</div>
-              <div class="stat-value">{{ formatNumber(stats.entities) }}</div>
-              <div class="stat-description">Knowledge graph entities</div>
-            </div>
-          </div>
-          
-          <div class="stat-card">
-            <div class="stat-icon">🔀</div>
-            <div class="stat-content">
-              <div class="stat-label">Relationships</div>
-              <div class="stat-value">{{ formatNumber(stats.relationships) }}</div>
-              <div class="stat-description">Connections between nodes</div>
-            </div>
-          </div>
-          
-          <div class="stat-card">
-            <div class="stat-icon">📊</div>
-            <div class="stat-content">
-              <div class="stat-label">Total Nodes</div>
-              <div class="stat-value">{{ formatNumber(stats.nodes) }}</div>
-              <div class="stat-description">All nodes in the knowledge graph</div>
+        <div v-if="mcpTools && mcpTools.length > 0" class="tools-section">
+          <h3>Available MCP Tools ({{ mcpTools.length }})</h3>
+          <div class="tools-grid">
+            <div v-for="tool in mcpTools" :key="tool.name" class="tool-card">
+              <div class="tool-header">
+                <h4 class="tool-name">{{ tool.name }}</h4>
+              </div>
+              <div v-if="tool.description" class="tool-description">
+                {{ tool.description }}
+              </div>
+              <div v-if="tool.inputSchema && tool.inputSchema.properties" class="tool-parameters">
+                <strong>Parameters:</strong>
+                <ul class="tool-params-list">
+                  <li v-for="(param, paramName) in tool.inputSchema.properties" :key="paramName">
+                    <code>{{ paramName }}</code>
+                    <span v-if="param.type">: {{ param.type }}</span>
+                    <span v-if="param.description"> - {{ param.description }}</span>
+                  </li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
 
-        <div v-if="!stats && !statsLoading && !statsError" class="stats-empty">
-          <p>Click "Refresh" to load statistics from the knowledge graph.</p>
+        <div v-if="!mcpTools && !toolsLoading && !toolsError" class="tools-empty">
+          <p>Click "List Tools" to see available MCP server tools.</p>
+        </div>
+
+        <div class="call-tool-section">
+          <h3>Call MCP Tool</h3>
+          <form @submit.prevent="callTool" class="call-tool-form">
+            <div class="form-group">
+              <label for="selectedTool">Select Tool</label>
+              <select 
+                id="selectedTool"
+                v-model="selectedToolName"
+                @change="onToolSelected"
+                class="select-input"
+                :disabled="!mcpTools || mcpTools.length === 0 || toolCalling"
+              >
+                <option value="">-- Select a tool --</option>
+                <option v-for="tool in mcpTools" :key="tool.name" :value="tool.name">
+                  {{ tool.name }}
+                </option>
+              </select>
+            </div>
+
+            <div v-if="selectedTool && selectedTool.inputSchema && selectedTool.inputSchema.properties" class="tool-arguments">
+              <h4>Arguments</h4>
+              <div v-for="(param, paramName) in selectedTool.inputSchema.properties" :key="paramName" class="form-group">
+                <label :for="`arg-${paramName}`">
+                  {{ paramName }}
+                  <span v-if="param.type" class="param-type">({{ param.type }})</span>
+                  <span v-if="isRequired(paramName)" class="required">*</span>
+                </label>
+                <div v-if="param.description" class="param-description">{{ param.description }}</div>
+                <input
+                  v-if="param.type === 'string' || param.type === 'integer' || param.type === 'number'"
+                  :id="`arg-${paramName}`"
+                  v-model="toolArguments[paramName]"
+                  :type="param.type === 'integer' || param.type === 'number' ? 'number' : 'text'"
+                  :placeholder="param.default !== undefined ? `Default: ${param.default}` : ''"
+                  class="input-field"
+                  :disabled="toolCalling"
+                />
+                <textarea
+                  v-else-if="param.type === 'array' || param.type === 'object'"
+                  :id="`arg-${paramName}`"
+                  v-model="toolArguments[paramName]"
+                  :placeholder="param.default !== undefined ? `Default: ${JSON.stringify(param.default)}` : 'Enter JSON'"
+                  rows="4"
+                  class="textarea"
+                  :disabled="toolCalling"
+                ></textarea>
+                <input
+                  v-else
+                  :id="`arg-${paramName}`"
+                  v-model="toolArguments[paramName]"
+                  type="text"
+                  :placeholder="param.default !== undefined ? `Default: ${param.default}` : ''"
+                  class="input-field"
+                  :disabled="toolCalling"
+                />
+              </div>
+            </div>
+
+            <div v-if="selectedTool && (!selectedTool.inputSchema || !selectedTool.inputSchema.properties || Object.keys(selectedTool.inputSchema.properties).length === 0)" class="no-arguments">
+              <p>This tool does not require any arguments.</p>
+            </div>
+
+            <button type="submit" :disabled="!selectedToolName || toolCalling" class="btn btn-primary">
+              {{ toolCalling ? 'Calling...' : 'Call Tool' }}
+            </button>
+          </form>
+
+          <div v-if="toolCallError" class="message error">
+            <p><strong>Error:</strong> {{ toolCallError }}</p>
+          </div>
+
+          <div v-if="toolCallResult" class="tool-result">
+            <h4>Result</h4>
+            <div class="result-info">
+              <p><strong>Tool:</strong> {{ toolCallResult.tool_name }}</p>
+              <p v-if="toolCallResult.arguments && Object.keys(toolCallResult.arguments).length > 0">
+                <strong>Arguments:</strong> {{ JSON.stringify(toolCallResult.arguments, null, 2) }}
+              </p>
+            </div>
+            <div class="result-content">
+              <pre>{{ formatToolResult(toolCallResult.result) }}</pre>
+            </div>
+            <details v-if="toolCallResult.mcp_response" class="mcp-response-details">
+              <summary>Raw MCP Response</summary>
+              <pre>{{ JSON.stringify(toolCallResult.mcp_response, null, 2) }}</pre>
+            </details>
+          </div>
         </div>
       </div>
     </main>
@@ -284,6 +562,7 @@ export default {
   data() {
     return {
       activeTab: 'ingest',
+      activeRetrievalMethod: 'vector-expansion',
       urls: '',
       onlyChunks: false,
       linkChunks: true,
@@ -299,11 +578,24 @@ export default {
       question: '',
       chatLoading: false,
       chatMessages: [],
+      openaiAgentsQuestion: '',
+      openaiAgentsLoading: false,
+      openaiAgentsMessages: [],
+      chatFullscreen: false,
+      openaiAgentsFullscreen: false,
       stats: null,
       statsLoading: false,
       statsError: '',
       mcpTesting: false,
       mcpTestResult: null,
+      mcpTools: null,
+      toolsLoading: false,
+      toolsError: '',
+      selectedToolName: '',
+      toolArguments: {},
+      toolCalling: false,
+      toolCallResult: null,
+      toolCallError: '',
       countdownTimer: null,
       countdownSeconds: 0,
       countdownInterval: null,
@@ -323,6 +615,10 @@ export default {
     if (this.countdownInterval) {
       clearInterval(this.countdownInterval)
     }
+    // Restore body overflow if in fullscreen
+    if (this.chatFullscreen || this.openaiAgentsFullscreen) {
+      document.body.style.overflow = ''
+    }
   },
   watch: {
     urls: {
@@ -336,6 +632,20 @@ export default {
         })
       },
       deep: true
+    },
+    chatLoading(newVal) {
+      if (newVal) {
+        this.$nextTick(() => {
+          this.scrollChatToBottom()
+        })
+      }
+    },
+    openaiAgentsLoading(newVal) {
+      if (newVal) {
+        this.$nextTick(() => {
+          this.scrollOpenAIAgentsChatToBottom()
+        })
+      }
     }
   },
   methods: {
@@ -549,7 +859,7 @@ export default {
       }
       this.chatMessages.push(userMessage)
 
-      // Scroll to bottom
+      // Scroll to bottom to show typing indicator
       this.$nextTick(() => {
         this.scrollChatToBottom()
       })
@@ -583,6 +893,84 @@ export default {
     scrollChatToBottom() {
       if (this.$refs.chatMessages) {
         this.$refs.chatMessages.scrollTop = this.$refs.chatMessages.scrollHeight
+      }
+    },
+    scrollOpenAIAgentsChatToBottom() {
+      if (this.$refs.openaiAgentsChatMessages) {
+        this.$refs.openaiAgentsChatMessages.scrollTop = this.$refs.openaiAgentsChatMessages.scrollHeight
+      }
+    },
+    toggleChatFullscreen() {
+      this.chatFullscreen = !this.chatFullscreen
+      if (this.chatFullscreen) {
+        document.body.style.overflow = 'hidden'
+      } else {
+        document.body.style.overflow = ''
+      }
+    },
+    toggleOpenAIAgentsFullscreen() {
+      this.openaiAgentsFullscreen = !this.openaiAgentsFullscreen
+      if (this.openaiAgentsFullscreen) {
+        document.body.style.overflow = 'hidden'
+      } else {
+        document.body.style.overflow = ''
+      }
+    },
+    async askOpenAIAgent() {
+      if (!this.openaiAgentsQuestion.trim() || this.openaiAgentsLoading) {
+        return
+      }
+
+      const userQuestion = this.openaiAgentsQuestion.trim()
+      this.openaiAgentsQuestion = ''
+      this.openaiAgentsLoading = true
+
+      // Add user message
+      const userMessage = {
+        type: 'user',
+        text: userQuestion,
+        time: new Date().toLocaleTimeString()
+      }
+      this.openaiAgentsMessages.push(userMessage)
+
+      // Scroll to bottom to show typing indicator
+      this.$nextTick(() => {
+        this.scrollOpenAIAgentsChatToBottom()
+      })
+      
+      // Keep scrolling while loading to follow typing indicator
+      const scrollInterval = setInterval(() => {
+        if (this.openaiAgentsLoading) {
+          this.scrollOpenAIAgentsChatToBottom()
+        } else {
+          clearInterval(scrollInterval)
+        }
+      }, 100)
+
+      try {
+        const response = await axios.post('/api/openai-agents/query', {
+          question: userQuestion
+        })
+
+        // Add agent response
+        const agentMessage = {
+          type: 'bot',
+          text: response.data.answer || 'No answer provided.',
+          time: new Date().toLocaleTimeString()
+        }
+        this.openaiAgentsMessages.push(agentMessage)
+      } catch (error) {
+        const errorMessage = {
+          type: 'bot',
+          text: error.response?.data?.detail || error.message || 'An error occurred while processing your question.',
+          time: new Date().toLocaleTimeString()
+        }
+        this.openaiAgentsMessages.push(errorMessage)
+      } finally {
+        this.openaiAgentsLoading = false
+        this.$nextTick(() => {
+          this.scrollOpenAIAgentsChatToBottom()
+        })
       }
     },
     async fetchStats() {
@@ -722,6 +1110,119 @@ export default {
       })
       
       return schema
+    },
+    async listMCPTools() {
+      this.toolsLoading = true
+      this.toolsError = ''
+      this.mcpTools = null
+      try {
+        const response = await axios.get('/api/mcp/tools')
+        this.mcpTools = response.data.tools || []
+      } catch (error) {
+        this.toolsError = error.response?.data?.detail || error.message || 'Failed to list MCP tools'
+        this.mcpTools = null
+      } finally {
+        this.toolsLoading = false
+      }
+    },
+    onToolSelected() {
+      // Reset arguments when tool changes
+      this.toolArguments = {}
+      this.toolCallResult = null
+      this.toolCallError = ''
+      
+      // Initialize arguments with default values if available
+      if (this.selectedTool && this.selectedTool.inputSchema && this.selectedTool.inputSchema.properties) {
+        const props = this.selectedTool.inputSchema.properties
+        Object.keys(props).forEach(paramName => {
+          const param = props[paramName]
+          if (param.default !== undefined) {
+            this.toolArguments[paramName] = param.default
+          }
+        })
+      }
+    },
+    isRequired(paramName) {
+      if (!this.selectedTool || !this.selectedTool.inputSchema || !this.selectedTool.inputSchema.required) {
+        return false
+      }
+      return this.selectedTool.inputSchema.required.includes(paramName)
+    },
+    async callTool() {
+      if (!this.selectedToolName) {
+        return
+      }
+
+      this.toolCalling = true
+      this.toolCallError = ''
+      this.toolCallResult = null
+
+      try {
+        // Parse arguments - handle JSON strings for complex types
+        const parsedArguments = {}
+        if (this.selectedTool && this.selectedTool.inputSchema && this.selectedTool.inputSchema.properties) {
+          Object.keys(this.toolArguments).forEach(paramName => {
+            const value = this.toolArguments[paramName]
+            const param = this.selectedTool.inputSchema.properties[paramName]
+            
+            if (value === '' || value === null || value === undefined) {
+              // Skip empty values unless required
+              if (!this.isRequired(paramName)) {
+                return
+              }
+            }
+            
+            // Try to parse JSON for array/object types
+            if (param.type === 'array' || param.type === 'object') {
+              try {
+                parsedArguments[paramName] = JSON.parse(value)
+              } catch (e) {
+                // If parsing fails, use as string
+                parsedArguments[paramName] = value
+              }
+            } else if (param.type === 'integer' || param.type === 'number') {
+              parsedArguments[paramName] = Number(value)
+            } else {
+              parsedArguments[paramName] = value
+            }
+          })
+        }
+
+        const response = await axios.post('/api/mcp/call', {
+          tool_name: this.selectedToolName,
+          arguments: parsedArguments
+        })
+
+        this.toolCallResult = response.data
+      } catch (error) {
+        this.toolCallError = error.response?.data?.detail || error.message || 'Failed to call tool'
+        this.toolCallResult = null
+      } finally {
+        this.toolCalling = false
+      }
+    },
+    formatToolResult(result) {
+      if (result === null || result === undefined) {
+        return 'No result returned'
+      }
+      if (typeof result === 'string') {
+        return result
+      }
+      if (Array.isArray(result)) {
+        return JSON.stringify(result, null, 2)
+      }
+      if (typeof result === 'object') {
+        return JSON.stringify(result, null, 2)
+      }
+      return String(result)
+    }
+  },
+  computed: {
+    selectedTool() {
+      if (!this.mcpTools || !this.selectedToolName) {
+        return null
+      }
+      return this.mcpTools.find(tool => tool.name === this.selectedToolName) || null
     }
   }
 }
@@ -1058,6 +1559,159 @@ export default {
   border-bottom-color: #4a90e2;
 }
 
+.retrieval-content {
+  width: 100%;
+}
+
+.retrieval-layout {
+  display: flex;
+  gap: 24px;
+  height: calc(100vh - 200px);
+  min-height: 600px;
+}
+
+.retrieval-sidebar {
+  width: 250px;
+  flex-shrink: 0;
+  background: white;
+  border: 1px solid #e9ecef;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  display: flex;
+  flex-direction: column;
+}
+
+.retrieval-sidebar h2 {
+  margin: 0 0 24px 0;
+  color: #1a1a2e;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.retrieval-main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.retrieval-tabs-vertical {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.retrieval-tab-wrapper {
+  position: relative;
+}
+
+.retrieval-tab-button-vertical {
+  padding: 14px 18px;
+  background: transparent;
+  border: 2px solid #e9ecef;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #6c757d;
+  cursor: pointer;
+  transition: all 0.3s;
+  text-align: left;
+  width: 100%;
+}
+
+.retrieval-tab-button-vertical:hover {
+  color: #1a1a2e;
+  background: #f8f9fa;
+  border-color: #dee2e6;
+}
+
+.retrieval-tab-button-vertical.active {
+  color: #4a90e2;
+  background: #f0f4f8;
+  border-color: #4a90e2;
+  box-shadow: 0 2px 4px rgba(74, 144, 226, 0.1);
+}
+
+.method-tooltip {
+  position: absolute;
+  left: calc(100% + 16px);
+  top: 0;
+  width: 400px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: white;
+  border: 2px solid #4a90e2;
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(-10px);
+  transition: all 0.3s ease;
+  pointer-events: none;
+}
+
+.retrieval-tab-wrapper:hover .method-tooltip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0);
+  pointer-events: auto;
+}
+
+.method-description-tooltip {
+  padding: 20px;
+}
+
+.method-description-tooltip h3 {
+  margin: 0 0 12px 0;
+  color: #1a1a2e;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.method-description-tooltip .method-summary {
+  margin: 0 0 16px 0;
+  color: #495057;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.method-description-tooltip .query-display {
+  margin-top: 16px;
+}
+
+.method-description-tooltip .query-display strong {
+  display: block;
+  margin-bottom: 8px;
+  color: #1a1a2e;
+  font-size: 14px;
+}
+
+.method-description-tooltip .query-code {
+  background: #1a1a2e;
+  color: #f8f9fa;
+  padding: 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+  margin: 0;
+  border: 1px solid #e9ecef;
+}
+
+.method-description-tooltip .method-features {
+  margin: 0;
+  padding-left: 20px;
+  color: #495057;
+  font-size: 14px;
+  line-height: 1.8;
+}
+
+.method-description-tooltip .method-features li {
+  margin-bottom: 8px;
+}
+
 .chat-content {
   max-width: 900px;
   margin: 0 auto;
@@ -1068,6 +1722,59 @@ export default {
   flex-direction: column;
   height: calc(100vh - 250px);
   min-height: 600px;
+  position: relative;
+  transition: all 0.3s ease;
+}
+
+.chat-card.chat-fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 100vh;
+  z-index: 9999;
+  border-radius: 0;
+  margin: 0;
+  padding: 20px;
+}
+
+.chat-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #e9ecef;
+}
+
+.chat-header h3 {
+  margin: 0;
+  color: #1a1a2e;
+  font-size: 20px;
+}
+
+.btn-icon {
+  background: #f8f9fa;
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 18px;
+  cursor: pointer;
+  transition: all 0.3s;
+  color: #495057;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  height: 40px;
+}
+
+.btn-icon:hover {
+  background: #e9ecef;
+  border-color: #4a90e2;
+  color: #4a90e2;
+  transform: scale(1.05);
 }
 
 .chat-card h2 {
@@ -1078,16 +1785,38 @@ export default {
   flex: 1;
   overflow-y: auto;
   padding: 20px;
-  background: #f8f9fa;
-  border-radius: 8px;
+  background: linear-gradient(to bottom, #ffffff 0%, #f8f9fa 100%);
+  border-radius: 12px;
   margin-bottom: 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  border: 1px solid #e9ecef;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.chat-messages::-webkit-scrollbar {
+  width: 8px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
 }
 
 .chat-message {
   display: flex;
+  align-items: flex-end;
+  gap: 12px;
   animation: fadeIn 0.3s ease-in;
 }
 
@@ -1110,22 +1839,115 @@ export default {
   justify-content: flex-start;
 }
 
-.message-content {
-  max-width: 70%;
-  padding: 12px 16px;
-  border-radius: 12px;
-  background: white;
+.message-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  overflow: hidden;
+  border: 2px solid #e9ecef;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
-.chat-message.user .message-content {
-  background: #4a90e2;
+.bot-avatar {
+  order: 0;
+}
+
+.user-avatar {
+  order: 2;
+}
+
+.message-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
   color: white;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.typing-indicator {
+  opacity: 0.8;
+}
+
+.typing-content {
+  padding: 16px 20px;
+  background: white;
+  border-bottom-left-radius: 4px;
+  border-left: 3px solid #4a90e2;
+}
+
+.typing-dots {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.typing-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #4a90e2;
+  animation: typing 1.4s infinite ease-in-out;
+}
+
+.typing-dots span:nth-child(1) {
+  animation-delay: -0.32s;
+}
+
+.typing-dots span:nth-child(2) {
+  animation-delay: -0.16s;
+}
+
+.typing-dots span:nth-child(3) {
+  animation-delay: 0s;
+}
+
+@keyframes typing {
+  0%, 80%, 100% {
+    transform: scale(0.8);
+    opacity: 0.5;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.message-content {
+  max-width: 75%;
+  padding: 14px 18px;
+  border-radius: 16px;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  transition: transform 0.2s ease;
+}
+
+.message-content:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.chat-message.user .message-content {
+  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
+  color: white;
+  border-bottom-right-radius: 4px;
 }
 
 .chat-message.bot .message-content {
   background: white;
   color: #1a1a2e;
+  border-bottom-left-radius: 4px;
+  border-left: 3px solid #4a90e2;
 }
 
 .message-header {
@@ -1156,14 +1978,22 @@ export default {
 
 .chat-input {
   flex: 1;
-  padding: 12px;
+  padding: 14px 16px;
   border: 2px solid #dee2e6;
-  border-radius: 8px;
+  border-radius: 12px;
   font-size: 14px;
   font-family: inherit;
   resize: none;
-  transition: border-color 0.3s;
+  transition: all 0.3s;
   color: #212529;
+  background: white;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.chat-input:focus {
+  outline: none;
+  border-color: #4a90e2;
+  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
 }
 
 .chat-input:focus {
@@ -1519,6 +2349,352 @@ export default {
   font-weight: 500;
   font-size: 14px;
   text-align: center;
+}
+
+.tools-section {
+  margin-top: 30px;
+  padding-top: 30px;
+  border-top: 2px solid #e9ecef;
+}
+
+.tools-section h3 {
+  margin-bottom: 20px;
+  color: #1a1a2e;
+  font-size: 20px;
+}
+
+.tools-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.tool-card {
+  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
+  border: 2px solid #e9ecef;
+  border-radius: 12px;
+  padding: 20px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+}
+
+.tool-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  border-color: #4a90e2;
+}
+
+.tool-header {
+  margin-bottom: 12px;
+}
+
+.tool-name {
+  margin: 0;
+  color: #1a1a2e;
+  font-size: 18px;
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+}
+
+.tool-description {
+  color: #495057;
+  font-size: 14px;
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.tool-parameters {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #e9ecef;
+}
+
+.tool-parameters strong {
+  color: #495057;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.tool-params-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.tool-params-list li {
+  padding: 6px 0;
+  font-size: 13px;
+  color: #6c757d;
+  line-height: 1.5;
+}
+
+.tool-params-list code {
+  background: #f8f9fa;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+  color: #4a90e2;
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.tools-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: #6c757d;
+  font-size: 16px;
+}
+
+.call-tool-section {
+  margin-top: 40px;
+  padding-top: 30px;
+  border-top: 2px solid #e9ecef;
+}
+
+.call-tool-section h3 {
+  margin-bottom: 20px;
+  color: #1a1a2e;
+  font-size: 20px;
+}
+
+.call-tool-form {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  background: #f8f9fa;
+  padding: 24px;
+  border-radius: 12px;
+  border: 1px solid #e9ecef;
+}
+
+.select-input {
+  width: 100%;
+  padding: 12px;
+  background: #ffffff;
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #212529;
+  cursor: pointer;
+  transition: border-color 0.3s;
+}
+
+.select-input:focus {
+  outline: none;
+  border-color: #4a90e2;
+}
+
+.select-input:disabled {
+  background: #e9ecef;
+  cursor: not-allowed;
+}
+
+.tool-arguments {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.tool-arguments h4 {
+  margin: 0 0 12px 0;
+  color: #495057;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.param-type {
+  color: #6c757d;
+  font-size: 12px;
+  font-weight: normal;
+  font-family: 'Courier New', monospace;
+}
+
+.required {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+.param-description {
+  font-size: 12px;
+  color: #6c757d;
+  margin-bottom: 4px;
+  font-style: italic;
+}
+
+.input-field {
+  width: 100%;
+  padding: 10px;
+  background: #ffffff;
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
+  font-size: 14px;
+  font-family: inherit;
+  color: #212529;
+  transition: border-color 0.3s;
+}
+
+.input-field:focus {
+  outline: none;
+  border-color: #4a90e2;
+}
+
+.input-field:disabled {
+  background: #f8f9fa;
+  cursor: not-allowed;
+}
+
+.no-arguments {
+  padding: 16px;
+  background: #e3f2fd;
+  border: 1px solid #90caf9;
+  border-radius: 8px;
+  color: #1976d2;
+  font-size: 14px;
+  text-align: center;
+}
+
+.tool-result {
+  margin-top: 24px;
+  padding: 20px;
+  background: #f0f4f8;
+  border: 2px solid #4a90e2;
+  border-radius: 12px;
+}
+
+.tool-result h4 {
+  margin: 0 0 16px 0;
+  color: #1a1a2e;
+  font-size: 18px;
+}
+
+.result-info {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.result-info p {
+  margin: 8px 0;
+  font-size: 14px;
+  color: #495057;
+}
+
+.result-content {
+  background: #1a1a2e;
+  border-radius: 8px;
+  padding: 16px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+
+.result-content pre {
+  margin: 0;
+  color: #f8f9fa;
+  font-size: 13px;
+  line-height: 1.5;
+  font-family: 'Courier New', monospace;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.retrieval-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  border-bottom: 2px solid #e9ecef;
+}
+
+.retrieval-tab-button {
+  padding: 12px 24px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  font-size: 15px;
+  font-weight: 600;
+  color: #6c757d;
+  cursor: pointer;
+  transition: all 0.3s;
+  margin-bottom: -2px;
+}
+
+.retrieval-tab-button:hover {
+  color: #1a1a2e;
+  background: #f8f9fa;
+}
+
+.retrieval-tab-button.active {
+  color: #4a90e2;
+  border-bottom-color: #4a90e2;
+}
+
+.retrieval-method-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.method-description {
+  background: linear-gradient(135deg, #f0f4f8 0%, #ffffff 100%);
+  border: 2px solid #e3f2fd;
+  border-radius: 12px;
+  padding: 24px;
+  margin-bottom: 20px;
+}
+
+.method-description h3 {
+  margin: 0 0 16px 0;
+  color: #1a1a2e;
+  font-size: 20px;
+}
+
+.method-description p {
+  color: #495057;
+  font-size: 14px;
+  line-height: 1.7;
+  margin-bottom: 12px;
+}
+
+.method-summary {
+  color: #495057;
+  font-size: 15px;
+  line-height: 1.7;
+  margin-bottom: 20px;
+  font-weight: 500;
+}
+
+.query-display {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #e9ecef;
+}
+
+.query-display strong {
+  display: block;
+  color: #1a1a2e;
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.query-code {
+  background: #1a1a2e;
+  color: #f8f9fa;
+  padding: 16px;
+  border-radius: 8px;
+  overflow-x: auto;
+  font-size: 13px;
+  line-height: 1.6;
+  font-family: 'Courier New', monospace;
+  margin: 0;
+  border: 1px solid #e9ecef;
+  white-space: pre;
 }
 </style>
 

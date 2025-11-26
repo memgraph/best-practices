@@ -13,6 +13,7 @@ dependencies = [
     "mcp>=1.14.1",
     "neo4j>=5.28.1",
     "numpy>=2.2.6",
+    "openai-agents==0.6.1",
     "python-dotenv>=1.1.1",
     "unstructured[all-docs]>=0.12.6",
     "uvicorn[standard]>=0.31.1",

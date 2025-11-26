@@ -12,10 +12,27 @@ from fastapi import APIRouter, HTTPException, Request
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from mcp_client import call_mcp_service
+from routes.llm_utils import generate_answer
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/query", tags=["query"])
+
+# MCP service URL - use service name when running in Docker, localhost when running locally
+# Default to localhost:8001 for local development (host port), or set MCP_MEMGRAPH_URL env var
+MCP_URL = os.getenv("MCP_MEMGRAPH_URL", "http://localhost:8001/mcp")
+
+
+def remove_embeddings_from_response(data):
+    """
+    Recursively remove 'embedding' keys from dictionaries in the response.
+    """
+    if isinstance(data, dict):
+        return {k: remove_embeddings_from_response(v) for k, v in data.items() if k != "embedding"}
+    elif isinstance(data, list):
+        return [remove_embeddings_from_response(item) for item in data]
+    else:
+        return data
 
 
 @router.post("")
@@ -45,32 +62,19 @@ async def query_graph(request: Request):
             detail="No question provided. Please provide a 'question' string."
         )
     
-    # MCP service URL - use service name when running in Docker, localhost when running locally
-    # Default to localhost:8001 for local development (host port), or set MCP_MEMGRAPH_URL env var
-    mcp_url = os.getenv("MCP_MEMGRAPH_URL", "http://localhost:8001/mcp")
-    
     try:
-        # For now, create a simple Cypher query that searches for nodes containing keywords from the question
-        # This is a basic implementation - in production, you'd use an LLM to generate better Cypher queries
-        question_lower = question.lower()
-        keywords = [word for word in question_lower.split() if len(word) > 3 and word.isalnum()]
+        # Use vector search to find relevant chunks based on question embedding
+        # Sanitize the question to prevent Cypher injection - escape single quotes
+        sanitized_question = question.replace("'", "\\'").replace("\\", "\\\\")
         
-        # Build a simple query to find relevant nodes
-        # Search in Chunk nodes (text content) and base nodes (entities)
-        if keywords:
-            # Sanitize keyword - remove any single quotes and escape
-            first_keyword = keywords[0].replace("'", "").replace('"', '')[:50]  # Limit length
-            # Create a query that searches for chunks containing the keywords
-            cypher_query = f"""
-            MATCH (n)
-            WHERE (n:Chunk AND toLower(n.text) CONTAINS '{first_keyword}')
-               OR (n:base AND toLower(n.name) CONTAINS '{first_keyword}')
-            RETURN n
-            LIMIT 10
-            """
-        else:
-            # Fallback query - just return some nodes
-            cypher_query = "MATCH (n:Chunk) RETURN n LIMIT 10"
+        # Build the GraphRAG query that embeds the prompt and searches for similar chunks
+        cypher_query = f"""
+        CALL embeddings.text(['{sanitized_question}']) YIELD embeddings, success
+        CALL vector_search.search('vs_name', 5, embeddings[0]) YIELD distance, node, similarity
+        MATCH (node)-[r*bfs]-(dst:Chunk)
+        WITH DISTINCT dst, degree(dst) AS degree ORDER BY degree DESC
+        RETURN dst LIMIT 5
+        """
         
         # Call mcp-memgraph service to execute the query
         payload = {
@@ -85,36 +89,31 @@ async def query_graph(request: Request):
             }
         }
         
-        mcp_result = await call_mcp_service(mcp_url, payload, timeout=30.0)
+        mcp_result = await call_mcp_service(MCP_URL, payload, timeout=30.0)
         
-        # Extract the result from MCP response
-        if "result" in mcp_result and "content" in mcp_result["result"]:
-            query_results = mcp_result["result"]["content"]
-            if isinstance(query_results, list) and len(query_results) > 0:
-                # Format the results into a readable answer
-                result_count = len(query_results)
-                answer = f"Found {result_count} result(s) related to your question: '{question}'.\n\n"
-                answer += "Query results:\n"
-                for i, result in enumerate(query_results[:5], 1):  # Show first 5 results
-                    if isinstance(result, dict):
-                        answer += f"\n{i}. {json.dumps(result, indent=2)}\n"
-                if result_count > 5:
-                    answer += f"\n... and {result_count - 5} more result(s)."
-            else:
-                answer = f"No results found for your question: '{question}'. The graph might not contain relevant information yet."
+        # Remove embedding from mcp_response before processing
+        cleaned_mcp_response = remove_embeddings_from_response(mcp_result)
+        
+        # Extract structuredContent from MCP response
+        structured_content = None
+        if "result" in cleaned_mcp_response and "structuredContent" in cleaned_mcp_response["result"]:
+            structured_content = cleaned_mcp_response["result"]["structuredContent"]
+        
+        if structured_content:
+            # Generate answer using LLM
+            answer = generate_answer(structured_content, question)
         else:
-            # Fallback if response format is different
-            answer = f"Query executed successfully. Response: {json.dumps(mcp_result, indent=2)}"
+            answer = f"No results found for your question: '{question}'. The graph might not contain relevant information yet."
         
         return {
             "question": question,
             "answer": answer,
             "status": "success",
-            "mcp_response": mcp_result
+            "mcp_response": cleaned_mcp_response
         }
             
     except httpx.ConnectError as e:
-        logger.error(f"Failed to connect to mcp-memgraph at {mcp_url}: {str(e)}")
+        logger.error(f"Failed to connect to mcp-memgraph at {MCP_URL}: {str(e)}")
         raise HTTPException(
             status_code=503,
             detail=f"Could not connect to mcp-memgraph service. Make sure the service is running. Error: {str(e)}"
