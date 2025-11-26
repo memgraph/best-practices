@@ -181,6 +181,31 @@ RETURN dst LIMIT 5</pre>
                 </div>
               </div>
             </div>
+            <div class="retrieval-tab-wrapper">
+              <button 
+                @click="activeRetrievalMethod = 'openai-agents-variant'" 
+                :class="['retrieval-tab-button-vertical', { active: activeRetrievalMethod === 'openai-agents-variant' }]"
+              >
+                OpenAI Agents + Additional Tooling
+              </button>
+              <div class="method-tooltip">
+                <div class="method-description-tooltip">
+                  <h3>OpenAI Agents + Additional Tooling</h3>
+                  <p class="method-summary">
+                    Same as OpenAI Agents but includes additional custom tools (e.g., say_hey). The agent can use both MCP tools and custom Python tools.
+                  </p>
+                  <div class="query-display">
+                    <strong>How it works:</strong>
+                    <ul class="method-features" style="margin-top: 12px;">
+                      <li>Uses OpenAI Agents SDK with MCP server tools (run_query, get_schema)</li>
+                      <li>Includes additional custom tools defined in the code</li>
+                      <li>The agent can choose to use any available tool based on your question</li>
+                      <li>Returns a natural language answer based on the tool results</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         
@@ -328,6 +353,101 @@ RETURN dst LIMIT 5</pre>
                 ></textarea>
                 <button type="submit" :disabled="openaiAgentsLoading || !openaiAgentsQuestion.trim()" class="btn btn-primary chat-send-btn">
                   {{ openaiAgentsLoading ? 'Sending...' : 'Send' }}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div v-if="activeRetrievalMethod === 'openai-agents-variant'" class="retrieval-method-content">
+          <div class="card chat-card" :class="{ 'chat-fullscreen': openaiAgentsVariantFullscreen }">
+            <div class="chat-header">
+              <h3>Ask a Question</h3>
+              <button @click="toggleOpenAIAgentsVariantFullscreen" class="btn-icon" :title="openaiAgentsVariantFullscreen ? 'Exit Fullscreen' : 'Fullscreen'">
+                {{ openaiAgentsVariantFullscreen ? '⤓' : '⛶' }}
+              </button>
+            </div>
+            <div class="chat-messages" ref="openaiAgentsVariantChatMessages">
+              <div v-for="(message, index) in openaiAgentsVariantMessages" :key="index" :class="['chat-message', message.type]">
+                <div v-if="message.type === 'bot'" class="message-avatar bot-avatar">
+                  <img src="https://avatars.githubusercontent.com/u/17707542?s=400&u=fda65e728ea4d5328bdc339ae13fdee45fd6b71e&v=4" alt="Memgraph" />
+                </div>
+                <div class="message-content">
+                  <div class="message-header">
+                    <strong>{{ message.type === 'user' ? 'You' : 'Memgraph Agent' }}</strong>
+                    <span class="message-time">{{ message.time }}</span>
+                  </div>
+                  <div class="message-text">{{ message.text }}</div>
+                  <div v-if="message.tools_used && message.tools_used.length > 0" class="tools-used">
+                    <div class="tools-used-header">
+                      <strong>Tools Used:</strong>
+                    </div>
+                    <div v-for="(tool, toolIndex) in message.tools_used" :key="toolIndex" class="tool-item">
+                      <span class="tool-name">{{ tool.name }}</span>
+                      <details v-if="tool.arguments" class="tool-arguments">
+                        <summary>Arguments</summary>
+                        <pre>{{ JSON.stringify(tool.arguments, null, 2) }}</pre>
+                      </details>
+                    </div>
+                  </div>
+                  <div v-if="message.conversation_history && message.conversation_history.length > 0" class="conversation-history-section">
+                    <button 
+                      @click="toggleConversationHistoryVariant(index)" 
+                      class="btn-conversation-history"
+                      :class="{ 'active': showConversationHistoryVariantFor === index }"
+                    >
+                      {{ showConversationHistoryVariantFor === index ? '▼' : '▶' }} Conversation History
+                    </button>
+                    <div v-if="showConversationHistoryVariantFor === index" class="conversation-history-content">
+                      <div v-for="(entry, entryIndex) in message.conversation_history" :key="entryIndex" :class="['conversation-entry', `conversation-entry-${entry.role}`, `conversation-entry-${entry.type}`]">
+                        <div class="conversation-entry-header">
+                          <span class="conversation-entry-role">{{ entry.role === 'user' ? '👤 User' : entry.role === 'assistant' ? '🤖 Assistant' : '🔧 Tool' }}</span>
+                          <span class="conversation-entry-type">{{ entry.type }}</span>
+                        </div>
+                        <div v-if="entry.type === 'tool_call'" class="conversation-entry-body">
+                          <div class="tool-call-info">
+                            <strong>Tool:</strong> {{ entry.tool_name }}
+                            <details v-if="entry.arguments" class="tool-arguments">
+                              <summary>Arguments</summary>
+                              <pre>{{ JSON.stringify(entry.arguments, null, 2) }}</pre>
+                            </details>
+                          </div>
+                        </div>
+                        <div v-else class="conversation-entry-body">
+                          <pre class="conversation-entry-content">{{ entry.content }}</pre>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div v-if="message.type === 'user'" class="message-avatar user-avatar">
+                  <div class="avatar-placeholder">You</div>
+                </div>
+              </div>
+              <div v-if="openaiAgentsVariantLoading" class="chat-message bot typing-indicator">
+                <div class="message-avatar bot-avatar">
+                  <img src="https://avatars.githubusercontent.com/u/17707542?s=400&u=fda65e728ea4d5328bdc339ae13fdee45fd6b71e&v=4" alt="Memgraph" />
+                </div>
+                <div class="message-content typing-content">
+                  <div class="typing-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <form @submit.prevent="askOpenAIAgentVariant" class="chat-form">
+              <div class="chat-input-container">
+                <textarea
+                  v-model="openaiAgentsVariantQuestion"
+                  placeholder="Ask a question about the knowledge graph..."
+                  class="chat-input"
+                  rows="2"
+                  :disabled="openaiAgentsVariantLoading"
+                ></textarea>
+                <button type="submit" :disabled="openaiAgentsVariantLoading || !openaiAgentsVariantQuestion.trim()" class="btn btn-primary chat-send-btn">
+                  {{ openaiAgentsVariantLoading ? 'Sending...' : 'Send' }}
                 </button>
               </div>
             </form>
@@ -623,8 +743,13 @@ export default {
       openaiAgentsLoading: false,
       openaiAgentsMessages: [],
       showConversationHistoryFor: null,
+      openaiAgentsVariantQuestion: '',
+      openaiAgentsVariantLoading: false,
+      openaiAgentsVariantMessages: [],
+      showConversationHistoryVariantFor: null,
       chatFullscreen: false,
       openaiAgentsFullscreen: false,
+      openaiAgentsVariantFullscreen: false,
       stats: null,
       statsLoading: false,
       statsError: '',
@@ -658,7 +783,7 @@ export default {
       clearInterval(this.countdownInterval)
     }
     // Restore body overflow if in fullscreen
-    if (this.chatFullscreen || this.openaiAgentsFullscreen) {
+    if (this.chatFullscreen || this.openaiAgentsFullscreen || this.openaiAgentsVariantFullscreen) {
       document.body.style.overflow = ''
     }
   },
@@ -686,6 +811,13 @@ export default {
       if (newVal) {
         this.$nextTick(() => {
           this.scrollOpenAIAgentsChatToBottom()
+        })
+      }
+    },
+    openaiAgentsVariantLoading(newVal) {
+      if (newVal) {
+        this.$nextTick(() => {
+          this.scrollOpenAIAgentsVariantChatToBottom()
         })
       }
     }
@@ -958,6 +1090,26 @@ export default {
         document.body.style.overflow = ''
       }
     },
+    toggleOpenAIAgentsVariantFullscreen() {
+      this.openaiAgentsVariantFullscreen = !this.openaiAgentsVariantFullscreen
+      if (this.openaiAgentsVariantFullscreen) {
+        document.body.style.overflow = 'hidden'
+      } else {
+        document.body.style.overflow = ''
+      }
+    },
+    toggleConversationHistoryVariant(index) {
+      if (this.showConversationHistoryVariantFor === index) {
+        this.showConversationHistoryVariantFor = null
+      } else {
+        this.showConversationHistoryVariantFor = index
+      }
+    },
+    scrollOpenAIAgentsVariantChatToBottom() {
+      if (this.$refs.openaiAgentsVariantChatMessages) {
+        this.$refs.openaiAgentsVariantChatMessages.scrollTop = this.$refs.openaiAgentsVariantChatMessages.scrollHeight
+      }
+    },
     toggleConversationHistory(index) {
       if (this.showConversationHistoryFor === index) {
         this.showConversationHistoryFor = null
@@ -1021,6 +1173,65 @@ export default {
         this.openaiAgentsLoading = false
         this.$nextTick(() => {
           this.scrollOpenAIAgentsChatToBottom()
+        })
+      }
+    },
+    async askOpenAIAgentVariant() {
+      if (!this.openaiAgentsVariantQuestion.trim() || this.openaiAgentsVariantLoading) {
+        return
+      }
+
+      const userQuestion = this.openaiAgentsVariantQuestion.trim()
+      this.openaiAgentsVariantQuestion = ''
+      this.openaiAgentsVariantLoading = true
+
+      // Add user message
+      const userMessage = {
+        type: 'user',
+        text: userQuestion,
+        time: new Date().toLocaleTimeString()
+      }
+      this.openaiAgentsVariantMessages.push(userMessage)
+
+      // Scroll to bottom to show typing indicator
+      this.$nextTick(() => {
+        this.scrollOpenAIAgentsVariantChatToBottom()
+      })
+      
+      // Keep scrolling while loading to follow typing indicator
+      const scrollInterval = setInterval(() => {
+        if (this.openaiAgentsVariantLoading) {
+          this.scrollOpenAIAgentsVariantChatToBottom()
+        } else {
+          clearInterval(scrollInterval)
+        }
+      }, 100)
+
+      try {
+        const response = await axios.post('/api/openai-agents-variant/query', {
+          question: userQuestion
+        })
+
+        // Add agent response
+        const agentMessage = {
+          type: 'bot',
+          text: response.data.answer || 'No answer provided.',
+          time: new Date().toLocaleTimeString(),
+          tools_used: response.data.tools_used || [],
+          conversation_history: response.data.conversation_history || []
+        }
+        this.openaiAgentsVariantMessages.push(agentMessage)
+      } catch (error) {
+        const errorMessage = {
+          type: 'bot',
+          text: error.response?.data?.detail || error.message || 'An error occurred while processing your question.',
+          time: new Date().toLocaleTimeString()
+        }
+        this.openaiAgentsVariantMessages.push(errorMessage)
+      } finally {
+        this.openaiAgentsVariantLoading = false
+        this.$nextTick(() => {
+          this.scrollOpenAIAgentsVariantChatToBottom()
         })
       }
     },

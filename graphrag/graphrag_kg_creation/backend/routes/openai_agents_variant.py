@@ -1,6 +1,6 @@
 """
-OpenAI Agents SDK integration with MCP servers.
-Uses Streamable HTTP transport for MCP communication.
+OpenAI Agents SDK integration with MCP servers - Variant with custom tool.
+This variant is the same as openai_agents.py but includes an additional custom tool.
 """
 import os
 import logging
@@ -14,28 +14,35 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/openai-agents", tags=["openai-agents"])
+router = APIRouter(prefix="/openai-agents-variant", tags=["openai-agents-variant"])
 
 # MCP service URL - use service name when running in Docker, localhost when running locally
 # Default to localhost:8001 for local development (host port), or set MCP_MEMGRAPH_URL env var
 MCP_URL = os.getenv("MCP_MEMGRAPH_URL", "http://localhost:8001/mcp")
 
 # Model configuration - defaults to gpt-4o (supports temperature)
-# Set OPENAI_AGENTS_MODEL env var to override (e.g., "gpt-4o", "gpt-4o-mini", "o1", etc.)
-# Note: GPT-5 and o1 models don't support temperature parameter
-AGENT_MODEL = os.getenv("OPENAI_AGENTS_MODEL", "gpt-4o")
+# Set OPENAI_AGENTS_VARIANT_MODEL env var to override
+VARIANT_MODEL = os.getenv("OPENAI_AGENTS_VARIANT_MODEL", "gpt-4o")
 
 from agents import Agent, Runner
 from agents.model_settings import ModelSettings
 from agents.mcp import MCPServerStreamableHttp
 from agents.mcp.util import create_static_tool_filter
+from agents.tool import function_tool
 from agents.items import ToolCallItem, MessageOutputItem, ToolCallOutputItem, ReasoningItem
 from agents.items import ItemHelpers
 from .prompts import DEFAULT_AGENT_INSTRUCTIONS
 
 
+# Custom tool: say_hey_custom_tool
+@function_tool
+def say_hey_custom_tool() -> str:
+    """Say hey! A simple greeting tool."""
+    return "hey"
+
+
 class QueryRequest(BaseModel):
-    """Request model for agent queries."""
+    """Request model for variant agent queries."""
     question: str
 
 
@@ -185,12 +192,12 @@ def extract_conversation_history(result, user_question: str) -> list[dict]:
 
 
 @router.post("/query")
-async def query_with_agent(request: QueryRequest):
+async def query_with_agent_variant(request: QueryRequest):
     """
-    Query the knowledge graph using OpenAI Agents SDK with MCP server.
+    Query the knowledge graph using OpenAI Agents SDK with MCP server - Variant with custom tool.
     
-    The agent uses the MCP server tools to answer questions about the knowledge graph.
-    This leverages the OpenAI Agents SDK which handles tool selection and execution automatically.
+    This variant is the same as openai_agents.py but includes an additional custom "say_hey" tool.
+    The agent can use this tool along with the MCP tools (run_query, get_schema).
     
     Expected JSON body:
     {
@@ -205,10 +212,8 @@ async def query_with_agent(request: QueryRequest):
     
     try:
         # Configure MCP server connection using Streamable HTTP transport
-        # The MCP server uses streamable-http transport on the /mcp endpoint
+        # Filter tools to only allow run_query and get_schema (same as openai_agents.py)
         
-        # Create MCP server instance with Streamable HTTP transport and use as async context manager
-        # Filter tools to only allow run_query and get_schema
         async with MCPServerStreamableHttp(
             name="Memgraph MCP Server",
             params={
@@ -218,17 +223,17 @@ async def query_with_agent(request: QueryRequest):
             cache_tools_list=True,  # Cache tools list to reduce latency
             tool_filter=create_static_tool_filter(allowed_tool_names=["run_query", "get_schema"]),
         ) as server:
-            # Configure agent - defaults to gpt-4o (supports temperature)
-            # Model can be set via OPENAI_AGENTS_MODEL env var
-            # Note: GPT-5 and o1 models don't support temperature parameter
+            # Configure agent - same settings as openai_agents.py
+            # But includes the custom say_hey tool
             agent_config = {
-                "name": "Knowledge Graph Assistant",
+                "name": "Knowledge Graph Assistant (Variant)",
                 "instructions": DEFAULT_AGENT_INSTRUCTIONS,
-                "model": AGENT_MODEL,  # Defaults to gpt-4o
+                "model": VARIANT_MODEL,  # Defaults to gpt-4o
                 "mcp_servers": [server],
+                "tools": [say_hey_custom_tool],  # Add custom tool here
                 "model_settings": ModelSettings(
-                    tool_choice="required",  # Always require tools
-                    temperature=0.1,  # Low temperature for deterministic responses (supported by gpt-4o)
+                    tool_choice="required",  # Always require tools (same as openai_agents.py)
+                    temperature=0.1,  # Low temperature for deterministic responses (same as openai_agents.py)
                 ),
             }
             
@@ -254,8 +259,9 @@ async def query_with_agent(request: QueryRequest):
             }
         
     except Exception as e:
-        logger.error(f"Error running agent: {str(e)}", exc_info=True)
+        logger.error(f"Error running variant agent: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Error running agent: {str(e)}"
+            detail=f"Error running variant agent: {str(e)}"
         )
+

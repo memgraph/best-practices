@@ -52,6 +52,13 @@ try:
 except ImportError:
     logger.warning("OpenAI Agents router not available. Install openai-agents package to enable.")
 
+# Import OpenAI Agents Variant router (variation with different settings)
+try:
+    from routes import openai_agents_variant
+    app.include_router(openai_agents_variant.router)
+except ImportError as e:
+    logger.warning(f"OpenAI Agents Variant router not available: {e}")
+
 
 @app.get("/")
 async def root():
