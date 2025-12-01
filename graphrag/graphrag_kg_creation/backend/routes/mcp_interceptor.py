@@ -4,7 +4,8 @@ This module provides a wrapper around MCP servers to intercept and log tool call
 particularly useful for capturing run_query calls.
 """
 import logging
-from typing import List, Dict, Any
+import json
+from typing import List, Dict, Any, Optional, Callable, Awaitable
 from agents.mcp.server import MCPServer
 from .common import extract_structured_content
 
@@ -15,16 +16,20 @@ class InterceptingMCPServer(MCPServer):
     """
     Wrapper around an MCP server that intercepts tool calls to capture run_query calls.
     This allows us to track all Cypher queries executed during a request.
+    Supports streaming callbacks for real-time updates.
     """
     
-    def __init__(self, wrapped_server: MCPServer):
+    def __init__(self, wrapped_server: MCPServer, stream_callback: Optional[Callable[[Dict[str, Any]], Awaitable[None]]] = None):
         """
         Args:
             wrapped_server: The actual MCP server to wrap
+            stream_callback: Optional async callback function to stream messages when tools are called.
+                           Should accept a dict with 'type', 'tool_name', 'query' (optional), and 'message' keys.
         """
         super().__init__(use_structured_content=wrapped_server.use_structured_content)
         self._wrapped = wrapped_server
         self._run_query_calls: List[Dict[str, Any]] = []
+        self._stream_callback = stream_callback
     
     @property
     def name(self) -> str:
@@ -42,7 +47,27 @@ class InterceptingMCPServer(MCPServer):
     async def call_tool(self, tool_name: str, arguments: dict[str, Any] | None) -> Any:
         """
         Intercept tool calls and capture run_query calls along with their results.
+        Streams temporary messages when tools are called.
         """
+        # Stream tool call start message
+        if self._stream_callback:
+            full_query = ""
+            if tool_name == "run_query" and arguments:
+                full_query = arguments.get("query", "")
+            
+            # Build full message with complete query
+            if tool_name == "run_query" and full_query:
+                message = f"Calling {tool_name}:\n\n{full_query}"
+            else:
+                message = f"Calling {tool_name}..."
+            
+            await self._stream_callback({
+                "type": "tool_call_start",
+                "tool_name": tool_name,
+                "query": full_query if tool_name == "run_query" else None,
+                "message": message
+            })
+        
         # Capture run_query calls
         if tool_name == "run_query" and arguments:
             query = arguments.get("query", "")
@@ -66,6 +91,14 @@ class InterceptingMCPServer(MCPServer):
             if self._run_query_calls:
                 self._run_query_calls[-1]["result"] = result_data
                 logger.info(f"Captured result for run_query call #{len(self._run_query_calls)}")
+        
+        # Stream tool call completion message
+        if self._stream_callback:
+            await self._stream_callback({
+                "type": "tool_call_complete",
+                "tool_name": tool_name,
+                "message": f"Completed {tool_name}"
+            })
         
         return result
     

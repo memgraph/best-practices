@@ -186,11 +186,11 @@ RETURN dst LIMIT 5</pre>
                 @click="activeRetrievalMethod = 'openai-agents-with-planning'" 
                 :class="['retrieval-tab-button-vertical', { active: activeRetrievalMethod === 'openai-agents-with-planning' }]"
               >
-                OpenAI Agents with Planning
+                OpenAI Agents with Basic Planning
               </button>
               <div class="method-tooltip">
                 <div class="method-description-tooltip">
-                  <h3>OpenAI Agents with Planning</h3>
+                  <h3>OpenAI Agents with Basic Planning</h3>
                   <p class="method-summary">
                     Multi-agent orchestration system that uses a planner-executor pattern. The planner agent generates 5-10 different query strategies, and the execution agent executes each one.
                   </p>
@@ -254,7 +254,7 @@ RETURN dst LIMIT 5</pre>
                     <strong>{{ message.type === 'user' ? 'You' : 'Memgraph' }}</strong>
                     <span class="message-time">{{ message.time }}</span>
                   </div>
-                  <div class="message-text">{{ message.text }}</div>
+                  <div class="message-text markdown-content" v-html="renderMarkdown(message.text)"></div>
                 </div>
                 <div v-if="message.type === 'user'" class="message-avatar user-avatar">
                   <div class="avatar-placeholder">You</div>
@@ -308,7 +308,7 @@ RETURN dst LIMIT 5</pre>
                     <strong>{{ message.type === 'user' ? 'You' : 'Memgraph Agent' }}</strong>
                     <span class="message-time">{{ message.time }}</span>
                   </div>
-                  <div class="message-text">{{ message.text }}</div>
+                  <div class="message-text markdown-content" v-html="renderMarkdown(message.text)"></div>
                   <div v-if="message.tools_used && message.tools_used.length > 0" class="tools-used">
                     <div class="tools-used-header">
                       <strong>Tools Used:</strong>
@@ -399,7 +399,7 @@ RETURN dst LIMIT 5</pre>
                     <strong>{{ message.type === 'user' ? 'You' : 'Memgraph Agent' }}</strong>
                     <span class="message-time">{{ message.time }}</span>
                   </div>
-                  <div class="message-text">{{ message.text }}</div>
+                  <div class="message-text markdown-content" v-html="renderMarkdown(message.text)"></div>
                 </div>
                 <div v-if="message.type === 'user'" class="message-avatar user-avatar">
                   <div class="avatar-placeholder">You</div>
@@ -588,16 +588,16 @@ RETURN dst LIMIT 5</pre>
               </div>
             </div>
             <div class="chat-messages" ref="openaiAgentsWithReasoningChatMessages">
-              <div v-for="(message, index) in openaiAgentsWithReasoningMessages" :key="index" :class="['chat-message', message.type]">
-                <div v-if="message.type === 'bot'" class="message-avatar bot-avatar">
+              <div v-for="(message, index) in openaiAgentsWithReasoningMessages" :key="message.id || index" :class="['chat-message', message.type, { 'temp-message': message.type === 'temp' || message.type === 'temp_complete' }]">
+                <div v-if="message.type === 'bot' || message.type === 'temp' || message.type === 'temp_complete'" class="message-avatar bot-avatar">
                   <img src="https://avatars.githubusercontent.com/u/17707542?s=400&u=fda65e728ea4d5328bdc339ae13fdee45fd6b71e&v=4" alt="Memgraph" />
                 </div>
                 <div class="message-content">
                   <div class="message-header">
-                    <strong>{{ message.type === 'user' ? 'You' : 'Memgraph Agent' }}</strong>
+                    <strong>{{ message.type === 'user' ? 'You' : (message.type === 'temp' || message.type === 'temp_complete' ? 'Tool Call' : 'Memgraph Agent') }}</strong>
                     <span class="message-time">{{ message.time }}</span>
                   </div>
-                  <div class="message-text">{{ message.text }}</div>
+                  <div class="message-text markdown-content" v-html="renderMarkdown(message.text)"></div>
                 </div>
                 <div v-if="message.type === 'user'" class="message-avatar user-avatar">
                   <div class="avatar-placeholder">You</div>
@@ -1109,6 +1109,16 @@ export default {
       if (newTab === 'stats' && !this.stats && !this.statsLoading) {
         this.fetchStats()
       }
+    })
+    // Render math when component is mounted
+    this.$nextTick(() => {
+      this.renderAllMath()
+    })
+  },
+  updated() {
+    // Render math after any updates
+    this.$nextTick(() => {
+      this.renderAllMath()
     })
   },
   beforeUnmount() {
@@ -1798,26 +1808,101 @@ export default {
       }, 100)
 
       try {
-        const response = await axios.post('/api/openai-agents-with-reasoning/query', {
-          question: userQuestion,
-          session_id: this.openaiAgentsWithReasoningSessionId  // Send session ID for continuity
+        // Use fetch API for SSE streaming
+        const response = await fetch('/api/openai-agents-with-reasoning/query-stream', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            question: userQuestion,
+            session_id: this.openaiAgentsWithReasoningSessionId
+          })
         })
 
-        // Store session_id from response if we don't have one yet
-        if (!this.openaiAgentsWithReasoningSessionId && response.data.session_id) {
-          this.openaiAgentsWithReasoningSessionId = response.data.session_id
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
         }
 
-        // Add agent response
-        const agentMessage = {
-          type: 'bot',
-          text: response.data.answer || 'No answer provided.',
-          time: new Date().toLocaleTimeString(),
-          tools_used: response.data.tools_used || [],
-          tool_call_graph: response.data.tool_call_graph || null,
-          run_query_calls: response.data.run_query_calls || []
+        // Track tool calls - each creates its own message bubble
+        let finalResult = null
+
+        // Process SSE stream
+        const reader = response.body.getReader()
+        const decoder = new TextDecoder()
+        let buffer = ''
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (done) break
+
+          buffer += decoder.decode(value, { stream: true })
+          const lines = buffer.split('\n')
+          buffer = lines.pop() || '' // Keep incomplete line in buffer
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6))
+                
+                if (data.type === 'tool_call') {
+                  // Create a new message bubble only for tool_call_start events
+                  const toolData = data.data
+                  
+                  // Only create bubbles for start events, ignore complete events
+                  if (toolData.type === 'tool_call_start') {
+                    // Use the full message which includes the complete query
+                    const toolCallMsg = {
+                      id: Date.now() + Math.random(), // Unique ID for each message
+                      type: 'temp',
+                      text: toolData.message || `Calling ${toolData.tool_name}...`,
+                      time: new Date().toLocaleTimeString(),
+                      tool_name: toolData.tool_name,
+                      query: toolData.query
+                    }
+                    this.openaiAgentsWithReasoningMessages.push(toolCallMsg)
+                    this.$nextTick(() => {
+                      this.scrollOpenAIAgentsWithReasoningChatToBottom()
+                      this.renderAllMath()
+                    })
+                  }
+                  // Ignore tool_call_complete events - no message needed
+                } else if (data.type === 'result') {
+                  finalResult = data.data
+                } else if (data.type === 'error') {
+                  throw new Error(data.error || 'Unknown error occurred')
+                }
+              } catch (e) {
+                console.error('Error parsing SSE data:', e)
+              }
+            }
+          }
         }
-        this.openaiAgentsWithReasoningMessages.push(agentMessage)
+
+        if (finalResult) {
+          // Store session_id from response if we don't have one yet
+          if (!this.openaiAgentsWithReasoningSessionId && finalResult.session_id) {
+            this.openaiAgentsWithReasoningSessionId = finalResult.session_id
+          }
+
+          // Add agent response
+          const agentMessage = {
+            type: 'bot',
+            text: finalResult.answer || 'No answer provided.',
+            time: new Date().toLocaleTimeString(),
+            tools_used: finalResult.tools_used || [],
+            tool_call_graph: finalResult.tool_call_graph || null,
+            run_query_calls: finalResult.run_query_calls || []
+          }
+          this.openaiAgentsWithReasoningMessages.push(agentMessage)
+          // Render math after adding the message
+          this.$nextTick(() => {
+            this.renderAllMath()
+            this.scrollOpenAIAgentsWithReasoningChatToBottom()
+          })
+        } else {
+          throw new Error('No result received from stream')
+        }
       } catch (error) {
         const errorMessage = {
           type: 'bot',
@@ -1825,10 +1910,125 @@ export default {
           time: new Date().toLocaleTimeString()
         }
         this.openaiAgentsWithReasoningMessages.push(errorMessage)
+        this.$nextTick(() => {
+          this.renderAllMath()
+        })
       } finally {
         this.openaiAgentsWithReasoningLoading = false
         this.$nextTick(() => {
           this.scrollOpenAIAgentsWithReasoningChatToBottom()
+        })
+      }
+    },
+    renderMarkdown(text) {
+      if (!text) return ''
+      
+      // Extract LaTeX math blocks first before escaping HTML
+      const mathBlocks = []
+      let mathIndex = 0
+      let html = text.replace(/\\\[([\s\S]*?)\\\]/g, (match, content) => {
+        const placeholder = `__MATH_BLOCK_${mathIndex}__`
+        mathBlocks.push(content)
+        mathIndex++
+        return placeholder
+      })
+      
+      // Escape HTML to prevent XSS
+      html = html
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+      
+      // Restore LaTeX math blocks (unescaped, KaTeX will render them)
+      mathBlocks.forEach((mathContent, index) => {
+        html = html.replace(`__MATH_BLOCK_${index}__`, `\\[${mathContent}\\]`)
+      })
+      
+      // Code blocks (```code```) - handle before inline code
+      html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
+      
+      // Inline code (`code`) - but not inside code blocks
+      html = html.replace(/`([^`\n]+?)`/g, '<code>$1</code>')
+      
+      // Headers (# Header)
+      html = html.replace(/^### (.*$)/gm, '<h3>$1</h3>')
+      html = html.replace(/^## (.*$)/gm, '<h2>$1</h2>')
+      html = html.replace(/^# (.*$)/gm, '<h1>$1</h1>')
+      
+      // Lists (- item) - wrap consecutive list items in ul
+      const lines = html.split('\n')
+      const processedLines = []
+      let inList = false
+      
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]
+        if (line.match(/^- (.+)$/)) {
+          if (!inList) {
+            processedLines.push('<ul>')
+            inList = true
+          }
+          processedLines.push(line.replace(/^- (.+)$/, '<li>$1</li>'))
+        } else {
+          if (inList) {
+            processedLines.push('</ul>')
+            inList = false
+          }
+          processedLines.push(line)
+        }
+      }
+      if (inList) {
+        processedLines.push('</ul>')
+      }
+      html = processedLines.join('\n')
+      
+      // Bold (**text**)
+      html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+      
+      // Italic (*text*) - but not bold
+      html = html.replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, '<em>$1</em>')
+      
+      // Line breaks (but preserve existing <br> from code blocks)
+      html = html.replace(/\n/g, '<br>')
+      
+      return html
+    },
+    renderAllMath() {
+      // Render KaTeX math in all markdown content elements
+      if (typeof window.renderMathInElement !== 'undefined') {
+        this.$nextTick(() => {
+          const mathElements = document.querySelectorAll('.markdown-content')
+          mathElements.forEach(element => {
+            try {
+              // Only render if not already rendered (check for katex elements)
+              if (!element.querySelector('.katex')) {
+                window.renderMathInElement(element, {
+                  delimiters: [
+                    {left: '\\[', right: '\\]', display: true}
+                  ],
+                  throwOnError: false
+                })
+              }
+            } catch (e) {
+              console.error('Error rendering math:', e)
+            }
+          })
+        })
+      }
+    },
+    renderMathInElement(element) {
+      // Render KaTeX math after DOM update
+      if (typeof window.renderMathInElement !== 'undefined' && element) {
+        this.$nextTick(() => {
+          try {
+            window.renderMathInElement(element, {
+              delimiters: [
+                {left: '\\[', right: '\\]', display: true}
+              ],
+              throwOnError: false
+            })
+          } catch (e) {
+            console.error('Error rendering math:', e)
+          }
         })
       }
     },
@@ -3005,6 +3205,44 @@ export default {
   border-left: 3px solid #4a90e2;
 }
 
+.chat-message.temp .message-content,
+.chat-message.temp-message .message-content {
+  background: #f0f7ff;
+  color: #1a1a2e;
+  border-bottom-left-radius: 4px;
+  border-left: 3px solid #4a90e2;
+  font-style: italic;
+  opacity: 0.8;
+  padding: 8px 12px;
+  max-width: 70%;
+  font-size: 0.85em;
+}
+
+.chat-message.temp .message-header,
+.chat-message.temp-message .message-header {
+  color: #4a90e2;
+  font-size: 0.85em;
+  margin-bottom: 4px;
+}
+
+.chat-message.temp .message-text,
+.chat-message.temp-message .message-text {
+  font-size: 0.85em;
+  line-height: 1.4;
+}
+
+.chat-message.temp .message-avatar,
+.chat-message.temp-message .message-avatar {
+  width: 24px;
+  height: 24px;
+}
+
+.chat-message.temp .message-avatar img,
+.chat-message.temp-message .message-avatar img {
+  width: 24px;
+  height: 24px;
+}
+
 .message-header {
   display: flex;
   justify-content: space-between;
@@ -3019,6 +3257,79 @@ export default {
   line-height: 1.5;
   white-space: pre-wrap;
   word-wrap: break-word;
+}
+
+.markdown-content {
+  white-space: normal;
+}
+
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3 {
+  margin: 12px 0 8px 0;
+  font-weight: 600;
+}
+
+.markdown-content h1 {
+  font-size: 1.3em;
+}
+
+.markdown-content h2 {
+  font-size: 1.2em;
+}
+
+.markdown-content h3 {
+  font-size: 1.1em;
+}
+
+.markdown-content code {
+  background: #f4f4f4;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: 'Courier New', monospace;
+  font-size: 0.9em;
+}
+
+.markdown-content pre {
+  background: #f4f4f4;
+  padding: 12px;
+  border-radius: 4px;
+  overflow-x: auto;
+  margin: 8px 0;
+}
+
+.markdown-content pre code {
+  background: none;
+  padding: 0;
+}
+
+.markdown-content ul {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.markdown-content li {
+  margin: 4px 0;
+}
+
+.markdown-content strong {
+  font-weight: 600;
+}
+
+.markdown-content em {
+  font-style: italic;
+}
+
+.markdown-content .katex-display {
+  margin: 12px 0;
+  padding: 8px;
+  background: #f9f9f9;
+  border-left: 3px solid #4a90e2;
+  overflow-x: auto;
+}
+
+.markdown-content .katex {
+  font-size: 1.1em;
 }
 
 .tools-used {

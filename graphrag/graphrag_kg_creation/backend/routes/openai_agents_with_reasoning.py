@@ -18,6 +18,8 @@ import uuid
 from pathlib import Path
 from typing import List, Dict, Any
 from fastapi import APIRouter, HTTPException, Request
+from fastapi.responses import StreamingResponse
+import asyncio
 from pydantic import BaseModel
 
 # Add parent directory to path for imports
@@ -49,9 +51,14 @@ from .prompts import (
     EXECUTION_AGENT_WITH_REASONING_INSTRUCTIONS,
     MANAGER_AGENT_WITH_REASONING_INSTRUCTIONS,
     REASONING_AGENT_INSTRUCTIONS,
+    GRAPH_SCHEMA_AGENT_INSTRUCTIONS,
 )
 from .common import extract_tools_used, build_trace_graph_from_items
-from .custom_tools import create_vector_search_tool
+from .custom_tools import (
+    create_vector_search_tool,
+    create_inspect_node_properties_tool,
+    create_get_adjacent_chunks_tool,
+)
 from .mcp_interceptor import InterceptingMCPServer
 
 # Session storage - dictionary mapping session_id to Session objects
@@ -175,16 +182,45 @@ def create_execution_agent(model: str, server) -> Agent:
     Returns:
         Configured execution agent
     """
-    # Create vector_search tool that uses the intercepting MCP server
+    # Create custom tools that use the intercepting MCP server
     # This way all queries go through the same interceptor
     vector_search_tool = create_vector_search_tool(mcp_server=server)
+    get_adjacent_chunks_tool = create_get_adjacent_chunks_tool(mcp_server=server)
     
     return Agent(
         name="Query Executor",
         instructions=EXECUTION_AGENT_WITH_REASONING_INSTRUCTIONS,
         model=model,
         mcp_servers=[server],  # Provides MCP tools: get_schema, run_query
-        tools=[vector_search_tool],  # Custom tool for vector search (uses MCP server, goes through interceptor)
+        tools=[vector_search_tool, get_adjacent_chunks_tool],  # Custom tools (use MCP server, go through interceptor)
+        model_settings=ModelSettings(
+            tool_choice="required",
+            temperature=0.1,
+            parallel_tool_calls=False,
+        ),
+    )
+
+
+def create_graph_schema_agent(model: str, server) -> Agent:
+    """
+    Create the graph schema agent that explores graph structure and node properties.
+    
+    Args:
+        model: The model to use for the schema agent
+        server: The MCP server instance (should be InterceptingMCPServer)
+    
+    Returns:
+        Configured graph schema agent
+    """
+    # Create inspect_node_properties tool that uses the intercepting MCP server
+    inspect_properties_tool = create_inspect_node_properties_tool(mcp_server=server)
+    
+    return Agent(
+        name="Graph Schema Explorer",
+        instructions=GRAPH_SCHEMA_AGENT_INSTRUCTIONS,
+        model=model,
+        mcp_servers=[server],  # Provides MCP tools: get_schema, run_query
+        tools=[inspect_properties_tool],  # Custom tool for inspecting node properties
         model_settings=ModelSettings(
             tool_choice="required",
             temperature=0.1,
@@ -228,6 +264,7 @@ def create_manager_agent(
     planner_agent: Agent, 
     execution_agent: Agent, 
     reasoning_agent: Agent,
+    graph_schema_agent: Agent,
     model: str
 ) -> Agent:
     """
@@ -238,6 +275,7 @@ def create_manager_agent(
         planner_agent: The planner agent to expose as a tool
         execution_agent: The execution agent to expose as a tool
         reasoning_agent: The reasoning agent to expose as a tool
+        graph_schema_agent: The graph schema agent to expose as a tool
         model: The model to use for the manager
 
     Returns:
@@ -252,9 +290,13 @@ def create_manager_agent(
                 tool_name="query_planner",
                 tool_description="Generates 5-10 high-level strategies for querying the Memgraph knowledge graph to answer a question. Call this first to get query strategies.",
             ),
+            graph_schema_agent.as_tool(
+                tool_name="graph_schema_explorer",
+                tool_description="Explores the graph schema and inspects node properties. Use this to understand the structure of the graph database, discover available node labels and their properties, and get sample data. Call this when you need to understand what data exists in the graph or when you need to explore specific node types.",
+            ),
             execution_agent.as_tool(
                 tool_name="query_executor",
-                tool_description="Executes a specific query strategy using available tools: MCP tools (get_schema, run_query) and custom tools (vector_search_on_chunks). Provides explicit reasoning about the execution process.",
+                tool_description="Executes a specific query strategy using available tools: MCP tools (get_schema, run_query) and custom tools (vector_search_on_chunks). Provides explicit reasoning about the execution process. When calling this tool, include the original user question in your input (formatted as 'Original user question: [QUESTION]. Strategy to execute: [strategy description]') so the executor has full context to make informed decisions about query phrasing.",
             ),
             reasoning_agent.as_tool(
                 tool_name="query_reasoner",
@@ -265,6 +307,139 @@ def create_manager_agent(
             tool_choice="auto",  # Manager decides when to use tools
             temperature=0.3,  # Moderate temperature for balanced decision-making
         ),
+    )
+
+
+@router.post("/query-stream")
+async def query_with_reasoning_stream(request: QueryRequest):
+    """
+    Query the knowledge graph with streaming updates via Server-Sent Events (SSE).
+    Streams temporary messages when tools are called.
+    """
+    if not request.question or not isinstance(request.question, str):
+        raise HTTPException(
+            status_code=400,
+            detail="No question provided. Please provide a 'question' string.",
+        )
+
+    async def event_generator():
+        """Generator function for SSE events."""
+        message_queue = asyncio.Queue()
+        final_result = {}
+        error_occurred = False
+        
+        async def stream_callback(message: Dict[str, Any]):
+            """Callback to stream messages from the interceptor."""
+            await message_queue.put(message)
+        
+        try:
+            # Get or create session for conversation continuity
+            session = get_or_create_session(request.session_id)
+            
+            # Set up MCP server connection
+            async with MCPServerStreamableHttp(
+                name="Memgraph MCP Server",
+                params={
+                    "url": MCP_URL,
+                    "headers": {},
+                    "timeout": 60.0,
+                },
+                cache_tools_list=True,
+                tool_filter=create_static_tool_filter(
+                    allowed_tool_names=["run_query", "get_schema"]
+                ),
+                client_session_timeout_seconds=60.0,
+            ) as base_server:
+                # Wrap the server to intercept run_query calls with streaming callback
+                intercepting_server = InterceptingMCPServer(base_server, stream_callback=stream_callback)
+                
+                # Create specialized sub-agents with the intercepting server
+                planner_agent = create_planner_agent(REASONING_MODEL)
+                execution_agent = create_execution_agent(REASONING_MODEL, intercepting_server)
+                reasoning_agent = create_reasoning_agent(REASONING_AGENT_MODEL)
+                graph_schema_agent = create_graph_schema_agent(REASONING_MODEL, intercepting_server)
+
+                # Create manager agent that orchestrates the sub-agents as tools
+                manager_agent = create_manager_agent(
+                    planner_agent, execution_agent, reasoning_agent, graph_schema_agent, REASONING_MODEL
+                )
+
+                logger.info(f"Running manager agent with reasoning with session {session.session_id}...")
+                
+                # Run agent in background task
+                async def run_agent():
+                    try:
+                        result = await Runner.run(
+                            manager_agent, 
+                            request.question,
+                            session=session
+                        )
+                        
+                        # Build trace graph from result.new_items
+                        trace_data = build_trace_graph_from_items(result, request.question)
+                        tools_used = extract_tools_used(result, include_nested=True)
+                        run_query_calls = intercepting_server.get_run_query_calls()
+                        
+                        final_result.update({
+                            "question": request.question,
+                            "answer": result.final_output,
+                            "status": "success",
+                            "session_id": session.session_id,
+                            "agent_run_id": getattr(result, "run_id", None),
+                            "tools_used": tools_used,
+                            "run_query_calls": run_query_calls,
+                            "tool_call_graph": trace_data,
+                        })
+                        await message_queue.put({"type": "done"})
+                    except Exception as e:
+                        logger.error(f"Error running reasoning agent: {str(e)}", exc_info=True)
+                        await message_queue.put({"type": "error", "error": str(e)})
+                
+                # Start agent task
+                agent_task = asyncio.create_task(run_agent())
+                
+                # Stream messages while agent is running
+                while True:
+                    try:
+                        # Wait for message with timeout
+                        message = await asyncio.wait_for(message_queue.get(), timeout=0.1)
+                        
+                        if message.get("type") == "done":
+                            # Send final result
+                            yield f"data: {json.dumps({'type': 'result', 'data': final_result})}\n\n"
+                            break
+                        elif message.get("type") == "error":
+                            yield f"data: {json.dumps({'type': 'error', 'error': message.get('error')})}\n\n"
+                            error_occurred = True
+                            break
+                        else:
+                            # Stream temporary message
+                            yield f"data: {json.dumps({'type': 'tool_call', 'data': message})}\n\n"
+                    
+                    except asyncio.TimeoutError:
+                        # Check if agent task is done
+                        if agent_task.done():
+                            if not error_occurred:
+                                # Send final result
+                                yield f"data: {json.dumps({'type': 'result', 'data': final_result})}\n\n"
+                            break
+                        continue
+                
+                # Wait for agent task to complete
+                await agent_task
+        
+        except Exception as e:
+            logger.error(f"Error in streaming: {str(e)}", exc_info=True)
+            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
     )
 
 
@@ -311,16 +486,17 @@ async def query_with_reasoning(request: QueryRequest):
         ) as base_server:
             # Wrap the server to intercept run_query calls
             # The base_server is already connected via the async context manager
-            intercepting_server = InterceptingMCPServer(base_server)
+            intercepting_server = InterceptingMCPServer(base_server, stream_callback=None)
             
             # Create specialized sub-agents with the intercepting server
             planner_agent = create_planner_agent(REASONING_MODEL)
             execution_agent = create_execution_agent(REASONING_MODEL, intercepting_server)
             reasoning_agent = create_reasoning_agent(REASONING_AGENT_MODEL)
+            graph_schema_agent = create_graph_schema_agent(REASONING_MODEL, intercepting_server)
 
             # Create manager agent that orchestrates the sub-agents as tools
             manager_agent = create_manager_agent(
-                planner_agent, execution_agent, reasoning_agent, REASONING_MODEL
+                planner_agent, execution_agent, reasoning_agent, graph_schema_agent, REASONING_MODEL
             )
 
             logger.info(f"Running manager agent with reasoning with session {session.session_id}...")
