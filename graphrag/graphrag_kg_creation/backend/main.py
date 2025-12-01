@@ -52,12 +52,12 @@ try:
 except ImportError:
     logger.warning("OpenAI Agents router not available. Install openai-agents package to enable.")
 
-# Import OpenAI Agents Variant router (variation with different settings)
+# Import OpenAI Agents With Planning router (multi-agent orchestration with planner-executor pattern)
 try:
-    from routes import openai_agents_variant
-    app.include_router(openai_agents_variant.router)
+    from routes import openai_agents_with_planning
+    app.include_router(openai_agents_with_planning.router)
 except ImportError as e:
-    logger.warning(f"OpenAI Agents Variant router not available: {e}")
+    logger.warning(f"OpenAI Agents With Planning router not available: {e}")
 
 
 @app.get("/")

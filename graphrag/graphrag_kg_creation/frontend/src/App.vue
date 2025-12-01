@@ -183,24 +183,24 @@ RETURN dst LIMIT 5</pre>
             </div>
             <div class="retrieval-tab-wrapper">
               <button 
-                @click="activeRetrievalMethod = 'openai-agents-variant'" 
-                :class="['retrieval-tab-button-vertical', { active: activeRetrievalMethod === 'openai-agents-variant' }]"
+                @click="activeRetrievalMethod = 'openai-agents-with-planning'" 
+                :class="['retrieval-tab-button-vertical', { active: activeRetrievalMethod === 'openai-agents-with-planning' }]"
               >
-                OpenAI Agents + Additional Tooling
+                OpenAI Agents with Planning
               </button>
               <div class="method-tooltip">
                 <div class="method-description-tooltip">
-                  <h3>OpenAI Agents + Additional Tooling</h3>
+                  <h3>OpenAI Agents with Planning</h3>
                   <p class="method-summary">
-                    Same as OpenAI Agents but includes additional custom tools (e.g., say_hey). The agent can use both MCP tools and custom Python tools.
+                    Multi-agent orchestration system that uses a planner-executor pattern. The planner agent generates 5-10 different query strategies, and the execution agent executes each one.
                   </p>
                   <div class="query-display">
                     <strong>How it works:</strong>
                     <ul class="method-features" style="margin-top: 12px;">
-                      <li>Uses OpenAI Agents SDK with MCP server tools (run_query, get_schema)</li>
-                      <li>Includes additional custom tools defined in the code</li>
-                      <li>The agent can choose to use any available tool based on your question</li>
-                      <li>Returns a natural language answer based on the tool results</li>
+                      <li>Planner agent generates 5-10 high-level query strategies</li>
+                      <li>Execution agent executes each strategy using MCP tools</li>
+                      <li>Returns results from all strategies for comprehensive answers</li>
+                      <li>Provides multiple approaches to answer your question</li>
                     </ul>
                   </div>
                 </div>
@@ -288,38 +288,24 @@ RETURN dst LIMIT 5</pre>
                       <strong>Tools Used:</strong>
                     </div>
                     <div v-for="(tool, toolIndex) in message.tools_used" :key="toolIndex" class="tool-item">
-                      <span class="tool-name">{{ tool.name }}</span>
+                      <div class="tool-header-row">
+                        <span class="tool-name">{{ tool.name }}</span>
+                        <span v-if="tool.nested_tools && tool.nested_tools.length > 0" class="nested-tools-badge">
+                          {{ tool.nested_tools.length }} nested tool{{ tool.nested_tools.length !== 1 ? 's' : '' }}
+                        </span>
+                      </div>
                       <details v-if="tool.arguments" class="tool-arguments">
                         <summary>Arguments</summary>
                         <pre>{{ JSON.stringify(tool.arguments, null, 2) }}</pre>
                       </details>
-                    </div>
-                  </div>
-                  <div v-if="message.conversation_history && message.conversation_history.length > 0" class="conversation-history-section">
-                    <button 
-                      @click="toggleConversationHistory(index)" 
-                      class="btn-conversation-history"
-                      :class="{ 'active': showConversationHistoryFor === index }"
-                    >
-                      {{ showConversationHistoryFor === index ? '▼' : '▶' }} Conversation History
-                    </button>
-                    <div v-if="showConversationHistoryFor === index" class="conversation-history-content">
-                      <div v-for="(entry, entryIndex) in message.conversation_history" :key="entryIndex" :class="['conversation-entry', `conversation-entry-${entry.role}`, `conversation-entry-${entry.type}`]">
-                        <div class="conversation-entry-header">
-                          <span class="conversation-entry-role">{{ entry.role === 'user' ? '👤 User' : entry.role === 'assistant' ? '🤖 Assistant' : '🔧 Tool' }}</span>
-                          <span class="conversation-entry-type">{{ entry.type }}</span>
-                        </div>
-                        <div v-if="entry.type === 'tool_call'" class="conversation-entry-body">
-                          <div class="tool-call-info">
-                            <strong>Tool:</strong> {{ entry.tool_name }}
-                            <details v-if="entry.arguments" class="tool-arguments">
-                              <summary>Arguments</summary>
-                              <pre>{{ JSON.stringify(entry.arguments, null, 2) }}</pre>
-                            </details>
-                          </div>
-                        </div>
-                        <div v-else class="conversation-entry-body">
-                          <pre class="conversation-entry-content">{{ entry.content }}</pre>
+                      <div v-if="tool.nested_tools && tool.nested_tools.length > 0" class="nested-tools">
+                        <div class="nested-tools-header">Nested Tools:</div>
+                        <div v-for="(nestedTool, nestedIndex) in tool.nested_tools" :key="nestedIndex" class="nested-tool-item">
+                          <span class="nested-tool-name">{{ nestedTool.name }}</span>
+                          <details v-if="nestedTool.arguments" class="tool-arguments">
+                            <summary>Arguments</summary>
+                            <pre>{{ JSON.stringify(nestedTool.arguments, null, 2) }}</pre>
+                          </details>
                         </div>
                       </div>
                     </div>
@@ -359,16 +345,26 @@ RETURN dst LIMIT 5</pre>
           </div>
         </div>
 
-        <div v-if="activeRetrievalMethod === 'openai-agents-variant'" class="retrieval-method-content">
-          <div class="card chat-card" :class="{ 'chat-fullscreen': openaiAgentsVariantFullscreen }">
+        <div v-if="activeRetrievalMethod === 'openai-agents-with-planning'" class="retrieval-method-content">
+          <div class="card chat-card" :class="{ 'chat-fullscreen': openaiAgentsWithPlanningFullscreen }">
             <div class="chat-header">
               <h3>Ask a Question</h3>
-              <button @click="toggleOpenAIAgentsVariantFullscreen" class="btn-icon" :title="openaiAgentsVariantFullscreen ? 'Exit Fullscreen' : 'Fullscreen'">
-                {{ openaiAgentsVariantFullscreen ? '⤓' : '⛶' }}
-              </button>
+              <div style="display: flex; gap: 8px;">
+                <button 
+                  @click="clearOpenAIAgentsWithPlanningSession" 
+                  class="btn-icon" 
+                  title="New Conversation"
+                  v-if="openaiAgentsWithPlanningSessionId"
+                >
+                  🗑️
+                </button>
+                <button @click="toggleOpenAIAgentsWithPlanningFullscreen" class="btn-icon" :title="openaiAgentsWithPlanningFullscreen ? 'Exit Fullscreen' : 'Fullscreen'">
+                  {{ openaiAgentsWithPlanningFullscreen ? '⤓' : '⛶' }}
+                </button>
+              </div>
             </div>
-            <div class="chat-messages" ref="openaiAgentsVariantChatMessages">
-              <div v-for="(message, index) in openaiAgentsVariantMessages" :key="index" :class="['chat-message', message.type]">
+            <div class="chat-messages" ref="openaiAgentsWithPlanningChatMessages">
+              <div v-for="(message, index) in openaiAgentsWithPlanningMessages" :key="index" :class="['chat-message', message.type]">
                 <div v-if="message.type === 'bot'" class="message-avatar bot-avatar">
                   <img src="https://avatars.githubusercontent.com/u/17707542?s=400&u=fda65e728ea4d5328bdc339ae13fdee45fd6b71e&v=4" alt="Memgraph" />
                 </div>
@@ -378,53 +374,12 @@ RETURN dst LIMIT 5</pre>
                     <span class="message-time">{{ message.time }}</span>
                   </div>
                   <div class="message-text">{{ message.text }}</div>
-                  <div v-if="message.tools_used && message.tools_used.length > 0" class="tools-used">
-                    <div class="tools-used-header">
-                      <strong>Tools Used:</strong>
-                    </div>
-                    <div v-for="(tool, toolIndex) in message.tools_used" :key="toolIndex" class="tool-item">
-                      <span class="tool-name">{{ tool.name }}</span>
-                      <details v-if="tool.arguments" class="tool-arguments">
-                        <summary>Arguments</summary>
-                        <pre>{{ JSON.stringify(tool.arguments, null, 2) }}</pre>
-                      </details>
-                    </div>
-                  </div>
-                  <div v-if="message.conversation_history && message.conversation_history.length > 0" class="conversation-history-section">
-                    <button 
-                      @click="toggleConversationHistoryVariant(index)" 
-                      class="btn-conversation-history"
-                      :class="{ 'active': showConversationHistoryVariantFor === index }"
-                    >
-                      {{ showConversationHistoryVariantFor === index ? '▼' : '▶' }} Conversation History
-                    </button>
-                    <div v-if="showConversationHistoryVariantFor === index" class="conversation-history-content">
-                      <div v-for="(entry, entryIndex) in message.conversation_history" :key="entryIndex" :class="['conversation-entry', `conversation-entry-${entry.role}`, `conversation-entry-${entry.type}`]">
-                        <div class="conversation-entry-header">
-                          <span class="conversation-entry-role">{{ entry.role === 'user' ? '👤 User' : entry.role === 'assistant' ? '🤖 Assistant' : '🔧 Tool' }}</span>
-                          <span class="conversation-entry-type">{{ entry.type }}</span>
-                        </div>
-                        <div v-if="entry.type === 'tool_call'" class="conversation-entry-body">
-                          <div class="tool-call-info">
-                            <strong>Tool:</strong> {{ entry.tool_name }}
-                            <details v-if="entry.arguments" class="tool-arguments">
-                              <summary>Arguments</summary>
-                              <pre>{{ JSON.stringify(entry.arguments, null, 2) }}</pre>
-                            </details>
-                          </div>
-                        </div>
-                        <div v-else class="conversation-entry-body">
-                          <pre class="conversation-entry-content">{{ entry.content }}</pre>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
                 </div>
                 <div v-if="message.type === 'user'" class="message-avatar user-avatar">
                   <div class="avatar-placeholder">You</div>
                 </div>
               </div>
-              <div v-if="openaiAgentsVariantLoading" class="chat-message bot typing-indicator">
+              <div v-if="openaiAgentsWithPlanningLoading" class="chat-message bot typing-indicator">
                 <div class="message-avatar bot-avatar">
                   <img src="https://avatars.githubusercontent.com/u/17707542?s=400&u=fda65e728ea4d5328bdc339ae13fdee45fd6b71e&v=4" alt="Memgraph" />
                 </div>
@@ -437,20 +392,154 @@ RETURN dst LIMIT 5</pre>
                 </div>
               </div>
             </div>
-            <form @submit.prevent="askOpenAIAgentVariant" class="chat-form">
+            <form @submit.prevent="askOpenAIAgentWithPlanning" class="chat-form">
               <div class="chat-input-container">
                 <textarea
-                  v-model="openaiAgentsVariantQuestion"
+                  v-model="openaiAgentsWithPlanningQuestion"
                   placeholder="Ask a question about the knowledge graph..."
                   class="chat-input"
                   rows="2"
-                  :disabled="openaiAgentsVariantLoading"
+                  :disabled="openaiAgentsWithPlanningLoading"
                 ></textarea>
-                <button type="submit" :disabled="openaiAgentsVariantLoading || !openaiAgentsVariantQuestion.trim()" class="btn btn-primary chat-send-btn">
-                  {{ openaiAgentsVariantLoading ? 'Sending...' : 'Send' }}
+                <button type="submit" :disabled="openaiAgentsWithPlanningLoading || !openaiAgentsWithPlanningQuestion.trim()" class="btn btn-primary chat-send-btn">
+                  {{ openaiAgentsWithPlanningLoading ? 'Sending...' : 'Send' }}
                 </button>
               </div>
             </form>
+          </div>
+
+          <!-- Trace Visualization -->
+          <div v-if="latestToolCallGraph" class="card trace-visualization-card">
+            <div class="stats-header">
+              <h3>Execution Trace</h3>
+              <div v-if="latestToolCallGraph.token_usage" class="token-usage-info">
+                <span class="token-stat">
+                  <strong>Input:</strong> {{ latestToolCallGraph.token_usage.input_tokens || 0 }}
+                </span>
+                <span class="token-stat">
+                  <strong>Output:</strong> {{ latestToolCallGraph.token_usage.output_tokens || 0 }}
+                </span>
+                <span class="token-stat">
+                  <strong>Total:</strong> {{ latestToolCallGraph.token_usage.total_tokens || 0 }}
+                </span>
+              </div>
+            </div>
+
+            <div class="tool-graph-container-retrieval">
+              <div class="graph-controls">
+                <button @click="zoomIn" class="btn-icon" title="Zoom In">+</button>
+                <button @click="zoomOut" class="btn-icon" title="Zoom Out">−</button>
+                <button @click="resetZoom" class="btn-icon" title="Reset Zoom">⌂</button>
+                <span class="zoom-level">{{ Math.round(graphZoom * 100) }}%</span>
+              </div>
+              <div class="tool-graph-visualization" 
+                   @wheel.prevent="handleWheel"
+                   @mousedown="startPan"
+                   @mousemove="handlePan"
+                   @mouseup="endPan"
+                   @mouseleave="endPan">
+                <svg :width="fullscreenGraphWidth" 
+                     :height="400" 
+                     class="tool-graph-svg">
+                  <!-- Arrow marker definition -->
+                  <defs>
+                    <marker id="arrowhead-retrieval" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                      <polygon points="0 0, 10 3, 0 6" fill="#4a90e2" />
+                    </marker>
+                  </defs>
+                  
+                  <!-- Transform group for zoom and pan -->
+                  <g :transform="`translate(${graphPanX}, ${graphPanY}) scale(${graphZoom})`">
+                    <!-- Draw relationships (edges) first so they appear behind nodes -->
+                    <g v-for="(rel, relIndex) in latestToolCallGraph.relationships" :key="relIndex">
+                      <line
+                        :x1="getNodePosition(rel.source, latestToolCallGraph, false).x"
+                        :y1="getNodePosition(rel.source, latestToolCallGraph, false).y"
+                        :x2="getNodePosition(rel.target, latestToolCallGraph, false).x"
+                        :y2="getNodePosition(rel.target, latestToolCallGraph, false).y"
+                        class="graph-edge"
+                        marker-end="url(#arrowhead-retrieval)"
+                      />
+                      <text
+                        :x="(getNodePosition(rel.source, latestToolCallGraph, false).x + getNodePosition(rel.target, latestToolCallGraph, false).x) / 2"
+                        :y="(getNodePosition(rel.source, latestToolCallGraph, false).y + getNodePosition(rel.target, latestToolCallGraph, false).y) / 2 - 5"
+                        class="graph-edge-label"
+                      >
+                        {{ rel.type }}
+                      </text>
+                    </g>
+                    
+                    <!-- Draw nodes -->
+                    <g v-for="(node, nodeIndex) in latestToolCallGraph.nodes" 
+                       :key="nodeIndex"
+                       @click.stop="selectNode(node)">
+                      <circle
+                        :cx="getNodePosition(node.id, latestToolCallGraph, false).x"
+                        :cy="getNodePosition(node.id, latestToolCallGraph, false).y"
+                        :r="nodeRadius"
+                        :class="['graph-node', `graph-node-${node.type}`, { 'graph-node-selected': selectedNode && selectedNode.id === node.id }]"
+                      />
+                      <text
+                        :x="getNodePosition(node.id, latestToolCallGraph, false).x"
+                        :y="getNodePosition(node.id, latestToolCallGraph, false).y + nodeRadius + 12"
+                        class="graph-node-label"
+                        text-anchor="middle"
+                      >
+                        {{ node.label }}
+                      </text>
+                    </g>
+                  </g>
+                </svg>
+              </div>
+              
+              <!-- Node Details Text Area -->
+              <div class="node-details-section">
+                <h4>Node Details</h4>
+                <textarea
+                  v-model="nodeDetailsText"
+                  readonly
+                  class="node-details-textarea"
+                  placeholder="Click on a node in the graph above to see its details..."
+                  rows="4"
+                ></textarea>
+              </div>
+            </div>
+
+            <!-- Run Query Calls Section -->
+            <div v-if="latestRunQueryCalls && latestRunQueryCalls.length > 0" class="run-query-calls-section">
+              <h4>Executed Cypher Queries ({{ latestRunQueryCalls.length }})</h4>
+              <p class="section-description">All run_query calls intercepted during the latest request execution.</p>
+              <div class="run-query-list">
+                <div 
+                  v-for="(queryCall, index) in latestRunQueryCalls" 
+                  :key="index" 
+                  class="run-query-item"
+                >
+                  <div class="run-query-header">
+                    <span class="run-query-index">Query #{{ queryCall.index + 1 }}</span>
+                    <div class="run-query-header-right">
+                      <span v-if="queryCall.context" class="run-query-context">{{ queryCall.context }}</span>
+                      <button 
+                        v-if="queryCall.result !== null && queryCall.result !== undefined"
+                        @click="toggleQueryResult(index)"
+                        class="btn-toggle-result"
+                        :class="{ 'expanded': expandedQueryResults.has(index) }"
+                      >
+                        {{ expandedQueryResults.has(index) ? '▼ Hide Result' : '▶ Show Result' }}
+                      </button>
+                    </div>
+                  </div>
+                  <pre class="run-query-code">{{ queryCall.query }}</pre>
+                  <div 
+                    v-if="queryCall.result !== null && queryCall.result !== undefined && expandedQueryResults.has(index)"
+                    class="run-query-result"
+                  >
+                    <div class="run-query-result-header">Result:</div>
+                    <pre class="run-query-result-code">{{ formatQueryResult(queryCall.result) }}</pre>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         </div>
@@ -515,6 +604,7 @@ RETURN dst LIMIT 5</pre>
         </div>
       </div>
     </main>
+
 
     <main class="main-content" v-if="activeTab === 'mcp'">
       <div class="card">
@@ -742,14 +832,22 @@ export default {
       openaiAgentsQuestion: '',
       openaiAgentsLoading: false,
       openaiAgentsMessages: [],
-      showConversationHistoryFor: null,
-      openaiAgentsVariantQuestion: '',
-      openaiAgentsVariantLoading: false,
-      openaiAgentsVariantMessages: [],
-      showConversationHistoryVariantFor: null,
+      openaiAgentsWithPlanningQuestion: '',
+      openaiAgentsWithPlanningLoading: false,
+      openaiAgentsWithPlanningMessages: [],
+      openaiAgentsWithPlanningSessionId: null,  // Store session ID for conversation continuity
+      graphPositionCache: new Map(),  // Cache node positions to prevent recalculation
+      graphZoom: 1.0,  // Zoom level for the graph
+      graphPanX: 0,  // Pan X offset
+      graphPanY: 0,  // Pan Y offset
+      isPanning: false,  // Whether user is currently panning
+      panStartX: 0,  // Starting X position when panning
+      panStartY: 0,  // Starting Y position when panning
+      selectedNode: null,  // Currently selected node
+      nodeDetailsText: '',  // Formatted node details text
       chatFullscreen: false,
       openaiAgentsFullscreen: false,
-      openaiAgentsVariantFullscreen: false,
+      openaiAgentsWithPlanningFullscreen: false,
       stats: null,
       statsLoading: false,
       statsError: '',
@@ -762,6 +860,7 @@ export default {
       toolArguments: {},
       toolCalling: false,
       toolCallResult: null,
+      expandedQueryResults: new Set(),  // Track which query results are expanded
       toolCallError: '',
       countdownTimer: null,
       countdownSeconds: 0,
@@ -783,11 +882,20 @@ export default {
       clearInterval(this.countdownInterval)
     }
     // Restore body overflow if in fullscreen
-    if (this.chatFullscreen || this.openaiAgentsFullscreen || this.openaiAgentsVariantFullscreen) {
+    if (this.chatFullscreen || this.openaiAgentsFullscreen || this.openaiAgentsWithPlanningFullscreen) {
       document.body.style.overflow = ''
     }
   },
   watch: {
+    latestToolCallGraph() {
+      // Clear cache when graph changes to recalculate positions
+      this.graphPositionCache.clear()
+      // Reset zoom and pan when graph changes
+      this.resetZoom()
+      // Clear selected node when graph changes
+      this.selectedNode = null
+      this.nodeDetailsText = ''
+    },
     urls: {
       handler: 'estimateChunks',
       immediate: false
@@ -814,10 +922,10 @@ export default {
         })
       }
     },
-    openaiAgentsVariantLoading(newVal) {
+    openaiAgentsWithPlanningLoading(newVal) {
       if (newVal) {
         this.$nextTick(() => {
-          this.scrollOpenAIAgentsVariantChatToBottom()
+          this.scrollOpenAIAgentsWithPlanningChatToBottom()
         })
       }
     }
@@ -1090,32 +1198,184 @@ export default {
         document.body.style.overflow = ''
       }
     },
-    toggleOpenAIAgentsVariantFullscreen() {
-      this.openaiAgentsVariantFullscreen = !this.openaiAgentsVariantFullscreen
-      if (this.openaiAgentsVariantFullscreen) {
+    toggleOpenAIAgentsWithPlanningFullscreen() {
+      this.openaiAgentsWithPlanningFullscreen = !this.openaiAgentsWithPlanningFullscreen
+      if (this.openaiAgentsWithPlanningFullscreen) {
         document.body.style.overflow = 'hidden'
       } else {
         document.body.style.overflow = ''
       }
     },
-    toggleConversationHistoryVariant(index) {
-      if (this.showConversationHistoryVariantFor === index) {
-        this.showConversationHistoryVariantFor = null
-      } else {
-        this.showConversationHistoryVariantFor = index
+    zoomIn() {
+      this.graphZoom = Math.min(this.graphZoom * 1.2, 5.0)  // Max zoom 5x
+    },
+    zoomOut() {
+      this.graphZoom = Math.max(this.graphZoom / 1.2, 0.1)  // Min zoom 0.1x
+    },
+    resetZoom() {
+      this.graphZoom = 1.0
+      this.graphPanX = 0
+      this.graphPanY = 0
+    },
+    handleWheel(event) {
+      const delta = event.deltaY > 0 ? 0.9 : 1.1
+      const newZoom = Math.max(0.1, Math.min(5.0, this.graphZoom * delta))
+      
+      // Zoom towards mouse position
+      const rect = event.currentTarget.getBoundingClientRect()
+      const mouseX = event.clientX - rect.left
+      const mouseY = event.clientY - rect.top
+      
+      // Calculate zoom point in graph coordinates
+      const graphX = (mouseX - this.graphPanX) / this.graphZoom
+      const graphY = (mouseY - this.graphPanY) / this.graphZoom
+      
+      // Adjust pan to keep the point under the mouse fixed
+      this.graphPanX = mouseX - graphX * newZoom
+      this.graphPanY = mouseY - graphY * newZoom
+      
+      this.graphZoom = newZoom
+    },
+    startPan(event) {
+      if (event.button === 0) {  // Left mouse button
+        this.isPanning = true
+        this.panStartX = event.clientX - this.graphPanX
+        this.panStartY = event.clientY - this.graphPanY
+        event.currentTarget.style.cursor = 'grabbing'
       }
     },
-    scrollOpenAIAgentsVariantChatToBottom() {
-      if (this.$refs.openaiAgentsVariantChatMessages) {
-        this.$refs.openaiAgentsVariantChatMessages.scrollTop = this.$refs.openaiAgentsVariantChatMessages.scrollHeight
+    handlePan(event) {
+      if (this.isPanning) {
+        this.graphPanX = event.clientX - this.panStartX
+        this.graphPanY = event.clientY - this.panStartY
       }
     },
-    toggleConversationHistory(index) {
-      if (this.showConversationHistoryFor === index) {
-        this.showConversationHistoryFor = null
-      } else {
-        this.showConversationHistoryFor = index
+    endPan(event) {
+      if (this.isPanning) {
+        this.isPanning = false
+        if (event.currentTarget) {
+          event.currentTarget.style.cursor = 'grab'
+        }
       }
+    },
+    selectNode(node) {
+      if (!this.isPanning) {
+        this.selectedNode = node
+        this.nodeDetailsText = this.formatNodeDetails(node)
+      }
+    },
+    formatNodeDetails(node) {
+      if (!node || !node.details) {
+        return 'No details available for this node.'
+      }
+      
+      let details = []
+      details.push(`Node: ${node.label}`)
+      details.push(`Type: ${node.type}`)
+      details.push('')
+      
+      // Function-specific details
+      if (node.type === 'function' && node.details.function_name) {
+        details.push(`Function Name: ${node.details.function_name}`)
+      }
+      
+      // Handoff-specific details
+      if (node.type === 'handoff' && node.details.target_agent) {
+        details.push(`Target Agent: ${node.details.target_agent}`)
+      }
+      
+      // Arguments
+      if (node.details.arguments) {
+        details.push('Arguments:')
+        details.push(this.formatValue(node.details.arguments))
+        details.push('')
+      }
+      
+      // Result
+      if (node.details.result) {
+        details.push('Result:')
+        details.push(this.formatValue(node.details.result))
+        details.push('')
+      }
+      
+      // Message
+      if (node.details.message) {
+        details.push('Message:')
+        details.push(this.formatValue(node.details.message))
+        details.push('')
+      }
+      
+      // Response/Content
+      if (node.details.response || node.details.content) {
+        details.push('Response:')
+        details.push(this.formatValue(node.details.response || node.details.content))
+        details.push('')
+      }
+      
+      // Prompt
+      if (node.details.prompt) {
+        details.push('Prompt:')
+        details.push(this.formatValue(node.details.prompt))
+        details.push('')
+      }
+      
+      // Model
+      if (node.details.model) {
+        details.push(`Model: ${node.details.model}`)
+      }
+      
+      // Agent Name
+      if (node.details.agent_name) {
+        details.push(`Agent Name: ${node.details.agent_name}`)
+      }
+      
+      // Tools
+      if (node.details.tools) {
+        details.push('Tools:')
+        details.push(this.formatValue(node.details.tools))
+        details.push('')
+      }
+      
+      // Start/Finish times
+      if (node.start) {
+        details.push(`Start: ${node.start}`)
+      }
+      if (node.finish) {
+        details.push(`Finish: ${node.finish}`)
+      }
+      
+      // Error
+      if (node.error) {
+        details.push('')
+        details.push(`ERROR: ${node.error}`)
+      }
+      
+      return details.join('\n')
+    },
+    formatValue(value) {
+      if (value === null || value === undefined) {
+        return ''
+      }
+      if (typeof value === 'string') {
+        return value
+      }
+      if (typeof value === 'object') {
+        try {
+          return JSON.stringify(value, null, 2)
+        } catch (e) {
+          return String(value)
+        }
+      }
+      return String(value)
+    },
+    scrollOpenAIAgentsWithPlanningChatToBottom() {
+      if (this.$refs.openaiAgentsWithPlanningChatMessages) {
+        this.$refs.openaiAgentsWithPlanningChatMessages.scrollTop = this.$refs.openaiAgentsWithPlanningChatMessages.scrollHeight
+      }
+    },
+    clearOpenAIAgentsWithPlanningSession() {
+      this.openaiAgentsWithPlanningSessionId = null
+      this.openaiAgentsWithPlanningMessages = []
     },
     async askOpenAIAgent() {
       if (!this.openaiAgentsQuestion.trim() || this.openaiAgentsLoading) {
@@ -1158,8 +1418,7 @@ export default {
           type: 'bot',
           text: response.data.answer || 'No answer provided.',
           time: new Date().toLocaleTimeString(),
-          tools_used: response.data.tools_used || [],
-          conversation_history: response.data.conversation_history || []
+          tools_used: response.data.tools_used || []
         }
         this.openaiAgentsMessages.push(agentMessage)
       } catch (error) {
@@ -1176,14 +1435,14 @@ export default {
         })
       }
     },
-    async askOpenAIAgentVariant() {
-      if (!this.openaiAgentsVariantQuestion.trim() || this.openaiAgentsVariantLoading) {
+    async askOpenAIAgentWithPlanning() {
+      if (!this.openaiAgentsWithPlanningQuestion.trim() || this.openaiAgentsWithPlanningLoading) {
         return
       }
 
-      const userQuestion = this.openaiAgentsVariantQuestion.trim()
-      this.openaiAgentsVariantQuestion = ''
-      this.openaiAgentsVariantLoading = true
+      const userQuestion = this.openaiAgentsWithPlanningQuestion.trim()
+      this.openaiAgentsWithPlanningQuestion = ''
+      this.openaiAgentsWithPlanningLoading = true
 
       // Add user message
       const userMessage = {
@@ -1191,26 +1450,35 @@ export default {
         text: userQuestion,
         time: new Date().toLocaleTimeString()
       }
-      this.openaiAgentsVariantMessages.push(userMessage)
+      this.openaiAgentsWithPlanningMessages.push(userMessage)
+      
+      // Clear expanded query results for new query
+      this.expandedQueryResults.clear()
 
       // Scroll to bottom to show typing indicator
       this.$nextTick(() => {
-        this.scrollOpenAIAgentsVariantChatToBottom()
+        this.scrollOpenAIAgentsWithPlanningChatToBottom()
       })
       
       // Keep scrolling while loading to follow typing indicator
       const scrollInterval = setInterval(() => {
-        if (this.openaiAgentsVariantLoading) {
-          this.scrollOpenAIAgentsVariantChatToBottom()
+        if (this.openaiAgentsWithPlanningLoading) {
+          this.scrollOpenAIAgentsWithPlanningChatToBottom()
         } else {
           clearInterval(scrollInterval)
         }
       }, 100)
 
       try {
-        const response = await axios.post('/api/openai-agents-variant/query', {
-          question: userQuestion
+        const response = await axios.post('/api/openai-agents-with-planning/query', {
+          question: userQuestion,
+          session_id: this.openaiAgentsWithPlanningSessionId  // Send session ID for continuity
         })
+
+        // Store session_id from response if we don't have one yet
+        if (!this.openaiAgentsWithPlanningSessionId && response.data.session_id) {
+          this.openaiAgentsWithPlanningSessionId = response.data.session_id
+        }
 
         // Add agent response
         const agentMessage = {
@@ -1218,20 +1486,21 @@ export default {
           text: response.data.answer || 'No answer provided.',
           time: new Date().toLocaleTimeString(),
           tools_used: response.data.tools_used || [],
-          conversation_history: response.data.conversation_history || []
+          tool_call_graph: response.data.tool_call_graph || null,
+          run_query_calls: response.data.run_query_calls || []
         }
-        this.openaiAgentsVariantMessages.push(agentMessage)
+        this.openaiAgentsWithPlanningMessages.push(agentMessage)
       } catch (error) {
         const errorMessage = {
           type: 'bot',
           text: error.response?.data?.detail || error.message || 'An error occurred while processing your question.',
           time: new Date().toLocaleTimeString()
         }
-        this.openaiAgentsVariantMessages.push(errorMessage)
+        this.openaiAgentsWithPlanningMessages.push(errorMessage)
       } finally {
-        this.openaiAgentsVariantLoading = false
+        this.openaiAgentsWithPlanningLoading = false
         this.$nextTick(() => {
-          this.scrollOpenAIAgentsVariantChatToBottom()
+          this.scrollOpenAIAgentsWithPlanningChatToBottom()
         })
       }
     },
@@ -1477,6 +1746,127 @@ export default {
         return JSON.stringify(result, null, 2)
       }
       return String(result)
+    },
+    getNodePosition(nodeId, graph, isFullscreen) {
+      // Simple layout: arrange nodes in a hierarchical tree structure
+      // Cache positions to prevent recalculation on every render
+      if (!graph || !graph.nodes) {
+        return { x: 100, y: 100 }
+      }
+      
+      // Create a cache key based on graph structure and dimensions
+      const graphKey = JSON.stringify({
+        nodes: graph.nodes.map(n => n.id).sort(),
+        relationships: graph.relationships.map(r => `${r.source}->${r.target}`).sort(),
+        width: isFullscreen ? this.fullscreenGraphWidth : this.graphWidth,
+        height: isFullscreen ? this.fullscreenGraphHeight : this.graphHeight
+      })
+      
+      // Check cache first
+      if (this.graphPositionCache.has(graphKey)) {
+        const cachedPositions = this.graphPositionCache.get(graphKey)
+        return cachedPositions[nodeId] || { x: 100, y: 100 }
+      }
+      
+      // Calculate positions if not cached
+      const nodes = graph.nodes || []
+      const relationships = graph.relationships || []
+      const width = isFullscreen ? this.fullscreenGraphWidth : this.graphWidth
+      const height = isFullscreen ? this.fullscreenGraphHeight : this.graphHeight
+      
+      // Find root nodes (nodes that are not targets of any relationship)
+      const targetNodes = new Set(relationships.map(r => r.target))
+      const rootNodes = nodes.filter(n => !targetNodes.has(n.id))
+      
+      // Simple hierarchical layout
+      const nodePositions = {}
+      const levelMap = {}
+      const visited = new Set()
+      
+      // Assign levels using BFS
+      const queue = []
+      rootNodes.forEach(node => {
+        levelMap[node.id] = 0
+        queue.push(node.id)
+        visited.add(node.id)
+      })
+      
+      while (queue.length > 0) {
+        const currentId = queue.shift()
+        const currentLevel = levelMap[currentId]
+        
+        relationships
+          .filter(r => r.source === currentId)
+          .forEach(rel => {
+            if (!visited.has(rel.target)) {
+              levelMap[rel.target] = currentLevel + 1
+              visited.add(rel.target)
+              queue.push(rel.target)
+            }
+          })
+      }
+      
+      // Position nodes by level
+      const nodesByLevel = {}
+      nodes.forEach(node => {
+        const level = levelMap[node.id] || 0
+        if (!nodesByLevel[level]) {
+          nodesByLevel[level] = []
+        }
+        nodesByLevel[level].push(node.id)
+      })
+      
+      const maxLevel = Math.max(...Object.keys(nodesByLevel).map(Number), 0)
+      const levelHeight = maxLevel > 0 ? height / (maxLevel + 1) : height / 2
+      
+      Object.keys(nodesByLevel).forEach(level => {
+        const levelNodes = nodesByLevel[level]
+        const levelY = (parseInt(level) + 1) * levelHeight
+        const nodeSpacing = width / (levelNodes.length + 1)
+        
+        levelNodes.forEach((nodeId, index) => {
+          nodePositions[nodeId] = {
+            x: (index + 1) * nodeSpacing,
+            y: levelY
+          }
+        })
+      })
+      
+      // Cache the positions
+      this.graphPositionCache.set(graphKey, nodePositions)
+      
+      // Limit cache size to prevent memory issues
+      if (this.graphPositionCache.size > 10) {
+        const firstKey = this.graphPositionCache.keys().next().value
+        this.graphPositionCache.delete(firstKey)
+      }
+      
+      return nodePositions[nodeId] || { x: 100, y: 100 }
+    },
+    toggleQueryResult(index) {
+      if (this.expandedQueryResults.has(index)) {
+        this.expandedQueryResults.delete(index)
+      } else {
+        this.expandedQueryResults.add(index)
+      }
+      // Force reactivity by creating a new Set
+      this.expandedQueryResults = new Set(this.expandedQueryResults)
+    },
+    formatQueryResult(result) {
+      if (result === null || result === undefined) {
+        return 'No result'
+      }
+      if (typeof result === 'string') {
+        return result
+      }
+      if (typeof result === 'object') {
+        try {
+          return JSON.stringify(result, null, 2)
+        } catch (e) {
+          return String(result)
+        }
+      }
+      return String(result)
     }
   },
   computed: {
@@ -1485,6 +1875,45 @@ export default {
         return null
       }
       return this.mcpTools.find(tool => tool.name === this.selectedToolName) || null
+    },
+    graphWidth() {
+      return 800
+    },
+    graphHeight() {
+      return 500
+    },
+    fullscreenGraphWidth() {
+      // Use a stable value to prevent reactive updates
+      return typeof window !== 'undefined' ? window.innerWidth - 80 : 1200
+    },
+    fullscreenGraphHeight() {
+      // Use a stable value to prevent reactive updates
+      return typeof window !== 'undefined' ? window.innerHeight - 120 : 800
+    },
+    nodeRadius() {
+      return 18  // Reduced from 30 to make nodes smaller
+    },
+    latestToolCallGraph() {
+      // Find the most recent tool call graph from messages
+      // Iterate backwards to find the latest one
+      for (let i = this.openaiAgentsWithPlanningMessages.length - 1; i >= 0; i--) {
+        const message = this.openaiAgentsWithPlanningMessages[i]
+        if (message.tool_call_graph && message.tool_call_graph.nodes && message.tool_call_graph.nodes.length > 0) {
+          return message.tool_call_graph
+        }
+      }
+      return null
+    },
+    latestRunQueryCalls() {
+      // Find the most recent run_query_calls from messages
+      // Iterate backwards to find the latest one
+      for (let i = this.openaiAgentsWithPlanningMessages.length - 1; i >= 0; i--) {
+        const message = this.openaiAgentsWithPlanningMessages[i]
+        if (message.run_query_calls && message.run_query_calls.length > 0) {
+          return message.run_query_calls
+        }
+      }
+      return []
     }
   }
 }
@@ -1774,6 +2203,13 @@ export default {
 .message.error {
   border-color: #ef4444;
   background: #fff5f5;
+}
+
+.message.info {
+  border-color: #4a90e2;
+  background: #f0f4f8;
+  padding: 20px;
+  border-radius: 8px;
 }
 
 .status {
@@ -2239,6 +2675,451 @@ export default {
   font-weight: 600;
   color: #4a90e2;
   margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.btn-tool-graph {
+  padding: 4px 12px;
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #4a90e2;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.btn-tool-graph:hover {
+  background: #e9ecef;
+  border-color: #4a90e2;
+}
+
+.btn-tool-graph.active {
+  background: #4a90e2;
+  color: white;
+  border-color: #4a90e2;
+}
+
+.tool-call-graph-section {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.tool-graph-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4a90e2;
+}
+
+.tool-graph-container {
+  margin: 16px 0;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+  overflow-x: auto;
+  transition: all 0.3s ease;
+}
+
+.tool-graph-container.tool-graph-fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10000;
+  margin: 0;
+  padding: 20px;
+  border-radius: 0;
+  background: white;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+}
+
+.trace-visualization-card {
+  margin-top: 20px;
+}
+
+.trace-visualization-card .stats-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.trace-visualization-card .stats-header h3 {
+  margin: 0;
+  color: #1a1a2e;
+  font-size: 20px;
+}
+
+.tool-graph-container-retrieval {
+  margin-top: 16px;
+  padding: 16px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.tool-graph-container-retrieval .node-details-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #dee2e6;
+}
+
+.tool-graph-container-retrieval .node-details-section h4 {
+  margin: 0 0 8px 0;
+  color: #1a1a2e;
+  font-size: 16px;
+}
+
+.tool-graph-container-retrieval .node-details-textarea {
+  min-height: 150px;
+  font-size: 12px;
+}
+
+.tool-graph-container-retrieval .run-query-calls-section {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #dee2e6;
+}
+
+.tool-graph-container-retrieval .run-query-calls-section h4 {
+  margin: 0 0 8px 0;
+  color: #1a1a2e;
+  font-size: 16px;
+}
+
+.tool-graph-container-full {
+  margin: 20px 0;
+  padding: 20px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  border: 1px solid #dee2e6;
+  overflow: hidden;
+  min-height: 400px;
+  display: flex;
+  flex-direction: column;
+}
+
+.graph-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 8px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+}
+
+.zoom-level {
+  margin-left: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #495057;
+  min-width: 50px;
+}
+
+
+.tool-graph-fullscreen-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #e9ecef;
+  flex-shrink: 0;
+}
+
+.tool-graph-fullscreen-header strong {
+  font-size: 18px;
+  color: #1a1a2e;
+}
+
+.tool-graph-visualization {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: grab;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
+
+.tool-graph-visualization:active {
+  cursor: grabbing;
+}
+
+.tool-graph-svg {
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  background: white;
+}
+
+.graph-edge {
+  stroke: #4a90e2;
+  stroke-width: 2;
+  fill: none;
+}
+
+.graph-edge-label {
+  font-size: 10px;
+  fill: #6c757d;
+  font-weight: 500;
+}
+
+.graph-node {
+  stroke: #fff;
+  stroke-width: 2;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.graph-node:hover {
+  stroke-width: 3;
+  filter: brightness(1.1);
+}
+
+.graph-node-selected {
+  stroke-width: 4;
+  stroke: #ff9800;
+  filter: brightness(1.2);
+}
+
+.graph-node-trace {
+  fill: #9c27b0;
+}
+
+.graph-node-agent {
+  fill: #4a90e2;
+}
+
+.graph-node-function {
+  fill: #28a745;
+}
+
+.graph-node-generation {
+  fill: #ff9800;
+}
+
+.graph-node-response {
+  fill: #00bcd4;
+}
+
+.graph-node-mcp_list_tools {
+  fill: #4caf50;
+}
+
+.graph-node-handoff {
+  fill: #e91e63;
+}
+
+.graph-node-guardrail {
+  fill: #f44336;
+}
+
+.graph-node-custom {
+  fill: #ffc107;
+}
+
+.graph-node-span {
+  fill: #6c757d;
+}
+
+.graph-node-unknown {
+  fill: #6c757d;
+}
+
+.graph-node-label {
+  font-size: 10px;
+  font-weight: 600;
+  fill: #1a1a2e;
+  pointer-events: none;
+}
+
+.node-details-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 2px solid #e9ecef;
+}
+
+.node-details-section h3 {
+  margin: 0 0 12px 0;
+  color: #1a1a2e;
+  font-size: 18px;
+}
+
+.node-details-textarea {
+  width: 100%;
+  min-height: 300px;
+  padding: 16px;
+  background: #f8f9fa;
+  border: 2px solid #dee2e6;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: 'Courier New', monospace;
+  resize: vertical;
+  color: #1a1a2e;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.node-details-textarea:focus {
+  outline: none;
+  border-color: #4a90e2;
+  background: white;
+}
+
+.run-query-calls-section {
+  margin-top: 20px;
+}
+
+.run-query-calls-section h3 {
+  margin-bottom: 12px;
+  color: #1a1a2e;
+  font-size: 20px;
+}
+
+.section-description {
+  color: #6c757d;
+  font-size: 14px;
+  margin-bottom: 20px;
+  font-style: italic;
+}
+
+.run-query-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.run-query-item {
+  background: #f8f9fa;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  padding: 16px;
+  transition: all 0.2s ease;
+}
+
+.run-query-item:hover {
+  border-color: #4a90e2;
+  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.1);
+}
+
+.run-query-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #dee2e6;
+}
+
+.run-query-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-toggle-result {
+  background: #4a90e2;
+  color: white;
+  border: none;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+  font-family: inherit;
+}
+
+.btn-toggle-result:hover {
+  background: #357abd;
+}
+
+.btn-toggle-result.expanded {
+  background: #6c757d;
+}
+
+.btn-toggle-result.expanded:hover {
+  background: #5a6268;
+}
+
+.run-query-result {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #dee2e6;
+}
+
+.run-query-result-header {
+  font-weight: 600;
+  color: #28a745;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.run-query-result-code {
+  margin: 0;
+  padding: 12px;
+  background: #f0f8ff;
+  border: 1px solid #b3d9ff;
+  border-radius: 6px;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  color: #212529;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-height: 500px;
+  overflow-y: auto;
+}
+
+.run-query-index {
+  font-weight: 600;
+  color: #4a90e2;
+  font-size: 14px;
+}
+
+.run-query-context {
+  font-size: 12px;
+  color: #6c757d;
+  background: #e9ecef;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-family: 'Courier New', monospace;
+}
+
+.run-query-code {
+  margin: 0;
+  padding: 12px;
+  background: #ffffff;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  font-family: 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #212529;
+  overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
 }
 
 .tool-item {
@@ -2249,10 +3130,58 @@ export default {
   border-left: 3px solid #4a90e2;
 }
 
+.tool-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 4px;
+}
+
 .tool-name {
   font-weight: 600;
   color: #1a1a2e;
   font-size: 13px;
+}
+
+.nested-tools-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #4a90e2;
+  background: #e3f2fd;
+  padding: 2px 8px;
+  border-radius: 12px;
+  border: 1px solid #90caf9;
+}
+
+.nested-tools {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(74, 144, 226, 0.2);
+  padding-left: 16px;
+  border-left: 2px solid #90caf9;
+}
+
+.nested-tools-header {
+  font-size: 11px;
+  font-weight: 600;
+  color: #495057;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.nested-tool-item {
+  margin-bottom: 8px;
+  padding: 6px 10px;
+  background: white;
+  border-radius: 6px;
+  border-left: 2px solid #90caf9;
+}
+
+.nested-tool-name {
+  font-weight: 600;
+  color: #1976d2;
+  font-size: 12px;
 }
 
 .tool-arguments {
@@ -2444,6 +3373,26 @@ export default {
 
 .stats-header h2 {
   margin: 0;
+}
+
+.token-usage-info {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  padding: 8px 16px;
+  background: #f0f4f8;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+}
+
+.token-stat {
+  font-size: 14px;
+  color: #495057;
+}
+
+.token-stat strong {
+  color: #1a1a2e;
+  margin-right: 4px;
 }
 
 .refresh-btn {

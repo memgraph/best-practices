@@ -115,7 +115,7 @@ async def initialize_mcp_session(mcp_url: str, timeout: float = 10.0) -> None:
                     pass
 
 
-async def call_mcp_service(mcp_url: str, payload: dict, timeout: float = 30.0) -> dict:
+async def call_mcp_service(mcp_url: str, payload: dict, timeout: float = 60.0) -> dict:
     """
     Helper function to call MCP service with session management.
     Handles session ID extraction and inclusion for streamable-http transport.
@@ -128,7 +128,10 @@ async def call_mcp_service(mcp_url: str, payload: dict, timeout: float = 30.0) -
     if not _mcp_initialized or not _mcp_session_id:
         await initialize_mcp_session(mcp_url, timeout=timeout)
     
-    async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+    # Create a timeout object with longer read timeout for SSE streams
+    timeout_config = httpx.Timeout(timeout, connect=10.0, read=timeout)
+    
+    async with httpx.AsyncClient(timeout=timeout_config, follow_redirects=True) as client:
         headers = {
             "Content-Type": "application/json",
             "Accept": "application/json, text/event-stream"
@@ -138,6 +141,7 @@ async def call_mcp_service(mcp_url: str, payload: dict, timeout: float = 30.0) -
         if _mcp_session_id:
             headers["mcp-session-id"] = _mcp_session_id
         
+        # Use regular POST - httpx will read the full SSE stream automatically
         response = await client.post(mcp_url, json=payload, headers=headers)
         
         # Extract session ID from response headers (in case it changed)
@@ -186,9 +190,10 @@ async def call_mcp_service(mcp_url: str, payload: dict, timeout: float = 30.0) -
         
         # Check if response has content
         if not response.text or response.text.strip() == "":
+            logger.warning(f"Empty response from MCP service. Status: {response.status_code}, Headers: {dict(response.headers)}")
             raise HTTPException(
                 status_code=500,
-                detail="Empty response from MCP service"
+                detail=f"Empty response from MCP service (status {response.status_code}). The service may be overloaded or the query timed out."
             )
         
         # Parse response (SSE or JSON format)

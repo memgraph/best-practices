@@ -68,6 +68,7 @@ async def query_with_agent(request: QueryRequest):
             params={
                 "url": MCP_URL,
                 "headers": {},  # Add any required headers here
+                "timeout": 60.0,  # Increase timeout to 60 seconds for get_schema and run_query calls
             },
             cache_tools_list=True,  # Cache tools list to reduce latency
             tool_filter=create_static_tool_filter(allowed_tool_names=["run_query", "get_schema"]),
