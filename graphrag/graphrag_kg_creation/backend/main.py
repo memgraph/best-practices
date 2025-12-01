@@ -59,6 +59,13 @@ try:
 except ImportError as e:
     logger.warning(f"OpenAI Agents With Planning router not available: {e}")
 
+# Import OpenAI Agents With Reasoning router (multi-agent orchestration with planning, execution, and reasoning)
+try:
+    from routes import openai_agents_with_reasoning
+    app.include_router(openai_agents_with_reasoning.router)
+except ImportError as e:
+    logger.warning(f"OpenAI Agents With Reasoning router not available: {e}")
+
 
 @app.get("/")
 async def root():

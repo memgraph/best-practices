@@ -206,6 +206,32 @@ RETURN dst LIMIT 5</pre>
                 </div>
               </div>
             </div>
+            <div class="retrieval-tab-wrapper">
+              <button 
+                @click="activeRetrievalMethod = 'openai-agents-with-reasoning'" 
+                :class="['retrieval-tab-button-vertical', { active: activeRetrievalMethod === 'openai-agents-with-reasoning' }]"
+              >
+                OpenAI Agents with Reasoning
+              </button>
+              <div class="method-tooltip">
+                <div class="method-description-tooltip">
+                  <h3>OpenAI Agents with Reasoning</h3>
+                  <p class="method-summary">
+                    Advanced multi-agent system with explicit reasoning capabilities. Uses iterative reasoning loops to guide query execution and ensure high-quality answers.
+                  </p>
+                  <div class="query-display">
+                    <strong>How it works:</strong>
+                    <ul class="method-features" style="margin-top: 12px;">
+                      <li>Planner agent generates 5-10 diverse query strategies</li>
+                      <li>Execution agent executes strategies with chain-of-thought reasoning</li>
+                      <li>Reasoning agent analyzes results and identifies gaps</li>
+                      <li>Iterative loop: Execute → Reason → Decide next steps</li>
+                      <li>Quality-focused: Executes fewer, well-reasoned queries</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
         
@@ -542,6 +568,209 @@ RETURN dst LIMIT 5</pre>
             </div>
           </div>
         </div>
+
+        <div v-if="activeRetrievalMethod === 'openai-agents-with-reasoning'" class="retrieval-method-content">
+          <div class="card chat-card" :class="{ 'chat-fullscreen': openaiAgentsWithReasoningFullscreen }">
+            <div class="chat-header">
+              <h3>Ask a Question (with Reasoning)</h3>
+              <div style="display: flex; gap: 8px;">
+                <button 
+                  @click="clearOpenAIAgentsWithReasoningSession" 
+                  class="btn-icon" 
+                  title="New Conversation"
+                  v-if="openaiAgentsWithReasoningSessionId"
+                >
+                  🗑️
+                </button>
+                <button @click="toggleOpenAIAgentsWithReasoningFullscreen" class="btn-icon" :title="openaiAgentsWithReasoningFullscreen ? 'Exit Fullscreen' : 'Fullscreen'">
+                  {{ openaiAgentsWithReasoningFullscreen ? '⤓' : '⛶' }}
+                </button>
+              </div>
+            </div>
+            <div class="chat-messages" ref="openaiAgentsWithReasoningChatMessages">
+              <div v-for="(message, index) in openaiAgentsWithReasoningMessages" :key="index" :class="['chat-message', message.type]">
+                <div v-if="message.type === 'bot'" class="message-avatar bot-avatar">
+                  <img src="https://avatars.githubusercontent.com/u/17707542?s=400&u=fda65e728ea4d5328bdc339ae13fdee45fd6b71e&v=4" alt="Memgraph" />
+                </div>
+                <div class="message-content">
+                  <div class="message-header">
+                    <strong>{{ message.type === 'user' ? 'You' : 'Memgraph Agent' }}</strong>
+                    <span class="message-time">{{ message.time }}</span>
+                  </div>
+                  <div class="message-text">{{ message.text }}</div>
+                </div>
+                <div v-if="message.type === 'user'" class="message-avatar user-avatar">
+                  <div class="avatar-placeholder">You</div>
+                </div>
+              </div>
+              <div v-if="openaiAgentsWithReasoningLoading" class="chat-message bot typing-indicator">
+                <div class="message-avatar bot-avatar">
+                  <img src="https://avatars.githubusercontent.com/u/17707542?s=400&u=fda65e728ea4d5328bdc339ae13fdee45fd6b71e&v=4" alt="Memgraph" />
+                </div>
+                <div class="message-content typing-content">
+                  <div class="typing-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <form @submit.prevent="askOpenAIAgentWithReasoning" class="chat-form">
+              <div class="chat-input-container">
+                <textarea
+                  v-model="openaiAgentsWithReasoningQuestion"
+                  placeholder="Ask a question about the knowledge graph..."
+                  class="chat-input"
+                  rows="2"
+                  :disabled="openaiAgentsWithReasoningLoading"
+                ></textarea>
+                <button type="submit" :disabled="openaiAgentsWithReasoningLoading || !openaiAgentsWithReasoningQuestion.trim()" class="btn btn-primary chat-send-btn">
+                  {{ openaiAgentsWithReasoningLoading ? 'Sending...' : 'Send' }}
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <!-- Trace Visualization -->
+          <div v-if="latestToolCallGraphReasoning" class="card trace-visualization-card">
+            <div class="stats-header">
+              <h3>Execution Trace</h3>
+              <div v-if="latestToolCallGraphReasoning.token_usage" class="token-usage-info">
+                <span class="token-stat">
+                  <strong>Input:</strong> {{ latestToolCallGraphReasoning.token_usage.input_tokens || 0 }}
+                </span>
+                <span class="token-stat">
+                  <strong>Output:</strong> {{ latestToolCallGraphReasoning.token_usage.output_tokens || 0 }}
+                </span>
+                <span class="token-stat">
+                  <strong>Total:</strong> {{ latestToolCallGraphReasoning.token_usage.total_tokens || 0 }}
+                </span>
+              </div>
+            </div>
+
+            <div class="tool-graph-container-retrieval">
+              <div class="graph-controls">
+                <button @click="zoomIn" class="btn-icon" title="Zoom In">+</button>
+                <button @click="zoomOut" class="btn-icon" title="Zoom Out">−</button>
+                <button @click="resetZoom" class="btn-icon" title="Reset Zoom">⌂</button>
+                <span class="zoom-level">{{ Math.round(graphZoom * 100) }}%</span>
+              </div>
+              <div class="tool-graph-visualization" 
+                   @wheel.prevent="handleWheel"
+                   @mousedown="startPan"
+                   @mousemove="handlePan"
+                   @mouseup="endPan"
+                   @mouseleave="endPan">
+                <svg 
+                  :width="graphWidth" 
+                  :height="graphHeight" 
+                  class="tool-graph-svg">
+                  <!-- Arrow marker definition -->
+                  <defs>
+                    <marker id="arrowhead-reasoning" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+                      <polygon points="0 0, 10 3, 0 6" fill="#4a90e2" />
+                    </marker>
+                  </defs>
+                  
+                  <!-- Transform group for zoom and pan -->
+                  <g :transform="`translate(${graphPanX}, ${graphPanY}) scale(${graphZoom})`">
+                    <!-- Edges -->
+                    <g v-if="latestToolCallGraphReasoning.relationships">
+                      <g v-for="(rel, idx) in latestToolCallGraphReasoning.relationships" :key="`rel-${idx}`">
+                        <line
+                          :x1="getNodePosition(rel.source, latestToolCallGraphReasoning, false).x"
+                          :y1="getNodePosition(rel.source, latestToolCallGraphReasoning, false).y"
+                          :x2="getNodePosition(rel.target, latestToolCallGraphReasoning, false).x"
+                          :y2="getNodePosition(rel.target, latestToolCallGraphReasoning, false).y"
+                          class="graph-edge"
+                          marker-end="url(#arrowhead-reasoning)"
+                          @click="selectedNode = null"
+                        />
+                        <text
+                          v-if="rel.label"
+                          :x="(getNodePosition(rel.source, latestToolCallGraphReasoning, false).x + getNodePosition(rel.target, latestToolCallGraphReasoning, false).x) / 2"
+                          :y="(getNodePosition(rel.source, latestToolCallGraphReasoning, false).y + getNodePosition(rel.target, latestToolCallGraphReasoning, false).y) / 2 - 5"
+                          class="graph-edge-label"
+                          text-anchor="middle"
+                        >
+                          {{ rel.label }}
+                        </text>
+                      </g>
+                    </g>
+                    <!-- Nodes -->
+                    <g v-if="latestToolCallGraphReasoning.nodes">
+                      <g v-for="(node, idx) in latestToolCallGraphReasoning.nodes"
+                         :key="`node-group-${idx}`"
+                         @click.stop="selectNode(node, latestToolCallGraphReasoning)">
+                        <circle
+                          :cx="getNodePosition(node.id, latestToolCallGraphReasoning, false).x"
+                          :cy="getNodePosition(node.id, latestToolCallGraphReasoning, false).y"
+                          :r="nodeRadius"
+                          :class="['graph-node', `graph-node-${node.type || 'unknown'}`, { 'graph-node-selected': selectedNode && selectedNode.id === node.id }]"
+                        />
+                        <text
+                          :x="getNodePosition(node.id, latestToolCallGraphReasoning, false).x"
+                          :y="getNodePosition(node.id, latestToolCallGraphReasoning, false).y + nodeRadius + 12"
+                          class="graph-node-label"
+                          text-anchor="middle"
+                        >
+                          {{ node.label || node.id }}
+                        </text>
+                      </g>
+                    </g>
+                  </g>
+                </svg>
+              </div>
+
+              <!-- Node Details -->
+              <div v-if="selectedNode" class="node-details-section">
+                <h4>Node Details</h4>
+                <textarea
+                  :value="nodeDetailsText"
+                  readonly
+                  class="node-details-textarea"
+                ></textarea>
+              </div>
+
+              <!-- Run Query Calls Section -->
+              <div v-if="latestRunQueryCallsReasoning && latestRunQueryCallsReasoning.length > 0" class="run-query-calls-section">
+                <h4>Executed Cypher Queries ({{ latestRunQueryCallsReasoning.length }})</h4>
+                <p class="section-description">All run_query calls intercepted during the latest request execution.</p>
+                <div class="run-query-list">
+                  <div 
+                    v-for="(queryCall, index) in latestRunQueryCallsReasoning" 
+                    :key="index" 
+                    class="run-query-item"
+                  >
+                    <div class="run-query-header">
+                      <span class="run-query-index">Query #{{ queryCall.index + 1 }}</span>
+                      <div class="run-query-header-right">
+                        <span v-if="queryCall.context" class="run-query-context">{{ queryCall.context }}</span>
+                        <button 
+                          v-if="queryCall.result !== null && queryCall.result !== undefined"
+                          @click="toggleQueryResultReasoning(index)"
+                          class="btn-toggle-result"
+                          :class="{ 'expanded': expandedQueryResultsReasoning.has(index) }"
+                        >
+                          {{ expandedQueryResultsReasoning.has(index) ? '▼ Hide Result' : '▶ Show Result' }}
+                        </button>
+                      </div>
+                    </div>
+                    <pre class="run-query-code">{{ queryCall.query }}</pre>
+                    <div 
+                      v-if="queryCall.result !== null && queryCall.result !== undefined && expandedQueryResultsReasoning.has(index)"
+                      class="run-query-result"
+                    >
+                      <div class="run-query-result-header">Result:</div>
+                      <pre class="run-query-result-code">{{ formatQueryResult(queryCall.result) }}</pre>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
         </div>
       </div>
     </main>
@@ -836,6 +1065,10 @@ export default {
       openaiAgentsWithPlanningLoading: false,
       openaiAgentsWithPlanningMessages: [],
       openaiAgentsWithPlanningSessionId: null,  // Store session ID for conversation continuity
+      openaiAgentsWithReasoningQuestion: '',
+      openaiAgentsWithReasoningLoading: false,
+      openaiAgentsWithReasoningMessages: [],
+      openaiAgentsWithReasoningSessionId: null,  // Store session ID for conversation continuity
       graphPositionCache: new Map(),  // Cache node positions to prevent recalculation
       graphZoom: 1.0,  // Zoom level for the graph
       graphPanX: 0,  // Pan X offset
@@ -848,6 +1081,7 @@ export default {
       chatFullscreen: false,
       openaiAgentsFullscreen: false,
       openaiAgentsWithPlanningFullscreen: false,
+      openaiAgentsWithReasoningFullscreen: false,
       stats: null,
       statsLoading: false,
       statsError: '',
@@ -861,6 +1095,7 @@ export default {
       toolCalling: false,
       toolCallResult: null,
       expandedQueryResults: new Set(),  // Track which query results are expanded
+      expandedQueryResultsReasoning: new Set(),  // Track which query results are expanded for reasoning
       toolCallError: '',
       countdownTimer: null,
       countdownSeconds: 0,
@@ -882,7 +1117,7 @@ export default {
       clearInterval(this.countdownInterval)
     }
     // Restore body overflow if in fullscreen
-    if (this.chatFullscreen || this.openaiAgentsFullscreen || this.openaiAgentsWithPlanningFullscreen) {
+    if (this.chatFullscreen || this.openaiAgentsFullscreen || this.openaiAgentsWithPlanningFullscreen || this.openaiAgentsWithReasoningFullscreen) {
       document.body.style.overflow = ''
     }
   },
@@ -926,6 +1161,13 @@ export default {
       if (newVal) {
         this.$nextTick(() => {
           this.scrollOpenAIAgentsWithPlanningChatToBottom()
+        })
+      }
+    },
+    openaiAgentsWithReasoningLoading(newVal) {
+      if (newVal) {
+        this.$nextTick(() => {
+          this.scrollOpenAIAgentsWithReasoningChatToBottom()
         })
       }
     }
@@ -1206,6 +1448,14 @@ export default {
         document.body.style.overflow = ''
       }
     },
+    toggleOpenAIAgentsWithReasoningFullscreen() {
+      this.openaiAgentsWithReasoningFullscreen = !this.openaiAgentsWithReasoningFullscreen
+      if (this.openaiAgentsWithReasoningFullscreen) {
+        document.body.style.overflow = 'hidden'
+      } else {
+        document.body.style.overflow = ''
+      }
+    },
     zoomIn() {
       this.graphZoom = Math.min(this.graphZoom * 1.2, 5.0)  // Max zoom 5x
     },
@@ -1373,9 +1623,18 @@ export default {
         this.$refs.openaiAgentsWithPlanningChatMessages.scrollTop = this.$refs.openaiAgentsWithPlanningChatMessages.scrollHeight
       }
     },
+    scrollOpenAIAgentsWithReasoningChatToBottom() {
+      if (this.$refs.openaiAgentsWithReasoningChatMessages) {
+        this.$refs.openaiAgentsWithReasoningChatMessages.scrollTop = this.$refs.openaiAgentsWithReasoningChatMessages.scrollHeight
+      }
+    },
     clearOpenAIAgentsWithPlanningSession() {
       this.openaiAgentsWithPlanningSessionId = null
       this.openaiAgentsWithPlanningMessages = []
+    },
+    clearOpenAIAgentsWithReasoningSession() {
+      this.openaiAgentsWithReasoningSessionId = null
+      this.openaiAgentsWithReasoningMessages = []
     },
     async askOpenAIAgent() {
       if (!this.openaiAgentsQuestion.trim() || this.openaiAgentsLoading) {
@@ -1501,6 +1760,75 @@ export default {
         this.openaiAgentsWithPlanningLoading = false
         this.$nextTick(() => {
           this.scrollOpenAIAgentsWithPlanningChatToBottom()
+        })
+      }
+    },
+    async askOpenAIAgentWithReasoning() {
+      if (!this.openaiAgentsWithReasoningQuestion.trim() || this.openaiAgentsWithReasoningLoading) {
+        return
+      }
+
+      const userQuestion = this.openaiAgentsWithReasoningQuestion.trim()
+      this.openaiAgentsWithReasoningQuestion = ''
+      this.openaiAgentsWithReasoningLoading = true
+
+      // Add user message
+      const userMessage = {
+        type: 'user',
+        text: userQuestion,
+        time: new Date().toLocaleTimeString()
+      }
+      this.openaiAgentsWithReasoningMessages.push(userMessage)
+      
+      // Clear expanded query results for new query
+      this.expandedQueryResultsReasoning.clear()
+
+      // Scroll to bottom to show typing indicator
+      this.$nextTick(() => {
+        this.scrollOpenAIAgentsWithReasoningChatToBottom()
+      })
+      
+      // Keep scrolling while loading to follow typing indicator
+      const scrollInterval = setInterval(() => {
+        if (this.openaiAgentsWithReasoningLoading) {
+          this.scrollOpenAIAgentsWithReasoningChatToBottom()
+        } else {
+          clearInterval(scrollInterval)
+        }
+      }, 100)
+
+      try {
+        const response = await axios.post('/api/openai-agents-with-reasoning/query', {
+          question: userQuestion,
+          session_id: this.openaiAgentsWithReasoningSessionId  // Send session ID for continuity
+        })
+
+        // Store session_id from response if we don't have one yet
+        if (!this.openaiAgentsWithReasoningSessionId && response.data.session_id) {
+          this.openaiAgentsWithReasoningSessionId = response.data.session_id
+        }
+
+        // Add agent response
+        const agentMessage = {
+          type: 'bot',
+          text: response.data.answer || 'No answer provided.',
+          time: new Date().toLocaleTimeString(),
+          tools_used: response.data.tools_used || [],
+          tool_call_graph: response.data.tool_call_graph || null,
+          run_query_calls: response.data.run_query_calls || []
+        }
+        this.openaiAgentsWithReasoningMessages.push(agentMessage)
+      } catch (error) {
+        const errorMessage = {
+          type: 'bot',
+          text: error.response?.data?.detail || error.message || 'An error occurred while processing your question.',
+          time: new Date().toLocaleTimeString()
+        }
+        this.openaiAgentsWithReasoningMessages.push(errorMessage)
+      } finally {
+        this.openaiAgentsWithReasoningLoading = false
+        this.$nextTick(() => {
+          this.scrollOpenAIAgentsWithReasoningChatToBottom()
         })
       }
     },
@@ -1852,6 +2180,15 @@ export default {
       // Force reactivity by creating a new Set
       this.expandedQueryResults = new Set(this.expandedQueryResults)
     },
+    toggleQueryResultReasoning(index) {
+      if (this.expandedQueryResultsReasoning.has(index)) {
+        this.expandedQueryResultsReasoning.delete(index)
+      } else {
+        this.expandedQueryResultsReasoning.add(index)
+      }
+      // Force reactivity by creating a new Set
+      this.expandedQueryResultsReasoning = new Set(this.expandedQueryResultsReasoning)
+    },
     formatQueryResult(result) {
       if (result === null || result === undefined) {
         return 'No result'
@@ -1909,6 +2246,26 @@ export default {
       // Iterate backwards to find the latest one
       for (let i = this.openaiAgentsWithPlanningMessages.length - 1; i >= 0; i--) {
         const message = this.openaiAgentsWithPlanningMessages[i]
+        if (message.run_query_calls && message.run_query_calls.length > 0) {
+          return message.run_query_calls
+        }
+      }
+      return []
+    },
+    latestToolCallGraphReasoning() {
+      // Find the most recent tool call graph from reasoning messages
+      for (let i = this.openaiAgentsWithReasoningMessages.length - 1; i >= 0; i--) {
+        const message = this.openaiAgentsWithReasoningMessages[i]
+        if (message.tool_call_graph && message.tool_call_graph.nodes && message.tool_call_graph.nodes.length > 0) {
+          return message.tool_call_graph
+        }
+      }
+      return null
+    },
+    latestRunQueryCallsReasoning() {
+      // Find the most recent run_query_calls from reasoning messages
+      for (let i = this.openaiAgentsWithReasoningMessages.length - 1; i >= 0; i--) {
+        const message = this.openaiAgentsWithReasoningMessages[i]
         if (message.run_query_calls && message.run_query_calls.length > 0) {
           return message.run_query_calls
         }
