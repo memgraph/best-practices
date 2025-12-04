@@ -1,0 +1,57 @@
+services:
+  memgraph:
+    image: memgraph/memgraph-mage:3.7.1
+    container_name: memgraph-assistant-db
+    ports:
+      - "7687:7687"
+      - "7444:7444"
+    command: ["--log-level=TRACE", "--also-log-to-stderr=true", "--schema-info-enabled=true"]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; s = socket.socket(); s.settimeout(1); result = s.connect_ex(('localhost', 7687)); s.close(); exit(0 if result == 0 else 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  memgraph-main:
+    image: memgraph/memgraph-mage:3.7.1
+    container_name: memgraph-assistant-main-db
+    ports:
+      - "7688:7687"
+      - "7445:7444"
+    command: ["--log-level=TRACE", "--also-log-to-stderr=true", "--schema-info-enabled=true"]
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import socket; s = socket.socket(); s.settimeout(1); result = s.connect_ex(('localhost', 7687)); s.close(); exit(0 if result == 0 else 1)"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  mcp-memgraph:
+    image: mcp-memgraph:latest
+    container_name: memgraph-assistant-mcp
+    ports:
+      - "8001:8000"
+    depends_on:
+      memgraph:
+        condition: service_healthy
+    environment:
+      - MEMGRAPH_URL=bolt://memgraph-assistant-db:7687
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8000
+      - MCP_TRANSPORT=streamable-http
+
+  mcp-memgraph-main:
+    image: mcp-memgraph:latest
+    container_name: memgraph-assistant-mcp-main
+    ports:
+      - "8002:8000"
+    depends_on:
+      memgraph-main:
+        condition: service_healthy
+    environment:
+      - MEMGRAPH_URL=bolt://memgraph-assistant-main-db:7687
+      - MCP_HOST=0.0.0.0
+      - MCP_PORT=8000
+      - MCP_TRANSPORT=streamable-http
+      - MCP_READ_ONLY=false
