@@ -47,7 +47,11 @@ from .prompts import (
     MANAGER_AGENT_INSTRUCTIONS,
 )
 from .common import extract_tools_used, build_trace_graph_from_items
-from .custom_tools import create_vector_search_tool, create_get_adjacent_chunks_tool
+from .custom_tools import (
+    create_vector_search_tool,
+    create_keyword_search_tool,
+    create_relevance_expansion_tool,
+)
 from .mcp_interceptor import InterceptingMCPServer
 
 # Session storage - dictionary mapping session_id to Session objects
@@ -174,14 +178,15 @@ def create_execution_agent(model: str, server) -> Agent:
     # Create custom tools that use the intercepting MCP server
     # This way all queries go through the same interceptor
     vector_search_tool = create_vector_search_tool(mcp_server=server)
-    get_adjacent_chunks_tool = create_get_adjacent_chunks_tool(mcp_server=server)
+    keyword_search_tool = create_keyword_search_tool(mcp_server=server)
+    relevance_expansion_tool = create_relevance_expansion_tool(mcp_server=server)
     
     return Agent(
         name="Query Executor",
         instructions=EXECUTION_AGENT_INSTRUCTIONS,
         model=model,
         mcp_servers=[server],  # Provides MCP tools: get_schema, run_query
-        tools=[vector_search_tool, get_adjacent_chunks_tool],  # Custom tools (use MCP server, go through interceptor)
+        tools=[vector_search_tool, keyword_search_tool, relevance_expansion_tool],  # Custom tools (use MCP server, go through interceptor)
         model_settings=ModelSettings(
             tool_choice="required",
             temperature=0.1,

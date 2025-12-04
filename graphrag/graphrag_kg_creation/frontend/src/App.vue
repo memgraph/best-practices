@@ -440,13 +440,19 @@ RETURN dst LIMIT 5</pre>
               <h3>Execution Trace</h3>
               <div v-if="latestToolCallGraph.token_usage" class="token-usage-info">
                 <span class="token-stat">
-                  <strong>Input:</strong> {{ latestToolCallGraph.token_usage.input_tokens || 0 }}
+                  <strong>Input tokens:</strong> {{ latestToolCallGraph.token_usage.input_tokens || 0 }}
                 </span>
                 <span class="token-stat">
-                  <strong>Output:</strong> {{ latestToolCallGraph.token_usage.output_tokens || 0 }}
+                  <strong>Output tokens:</strong> {{ latestToolCallGraph.token_usage.output_tokens || 0 }}
                 </span>
                 <span class="token-stat">
-                  <strong>Total:</strong> {{ latestToolCallGraph.token_usage.total_tokens || 0 }}
+                  <strong>Total tokens:</strong> {{ latestToolCallGraph.token_usage.total_tokens || 0 }}
+                </span>
+                <span v-if="latestToolCallGraph.response_time_seconds !== undefined" class="token-stat">
+                  <strong>Response time:</strong> {{ latestToolCallGraph.response_time_seconds.toFixed(2) }}s
+                </span>
+                <span v-if="latestRunQueryCalls && latestRunQueryCalls.length > 0" class="token-stat">
+                  <strong>Cypher queries:</strong> {{ latestRunQueryCalls.length }}
                 </span>
               </div>
             </div>
@@ -470,7 +476,7 @@ RETURN dst LIMIT 5</pre>
                   <!-- Arrow marker definition -->
                   <defs>
                     <marker id="arrowhead-retrieval" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-                      <polygon points="0 0, 10 3, 0 6" fill="#4a90e2" />
+                      <polygon points="0 0, 10 3, 0 6" fill="#FB6E00" />
                     </marker>
                   </defs>
                   
@@ -638,13 +644,19 @@ RETURN dst LIMIT 5</pre>
               <h3>Execution Trace</h3>
               <div v-if="latestToolCallGraphReasoning.token_usage" class="token-usage-info">
                 <span class="token-stat">
-                  <strong>Input:</strong> {{ latestToolCallGraphReasoning.token_usage.input_tokens || 0 }}
+                  <strong>Input tokens:</strong> {{ latestToolCallGraphReasoning.token_usage.input_tokens || 0 }}
                 </span>
                 <span class="token-stat">
-                  <strong>Output:</strong> {{ latestToolCallGraphReasoning.token_usage.output_tokens || 0 }}
+                  <strong>Output tokens:</strong> {{ latestToolCallGraphReasoning.token_usage.output_tokens || 0 }}
                 </span>
                 <span class="token-stat">
-                  <strong>Total:</strong> {{ latestToolCallGraphReasoning.token_usage.total_tokens || 0 }}
+                  <strong>Total tokens:</strong> {{ latestToolCallGraphReasoning.token_usage.total_tokens || 0 }}
+                </span>
+                <span v-if="latestToolCallGraphReasoning.response_time_seconds !== undefined" class="token-stat">
+                  <strong>Response time:</strong> {{ latestToolCallGraphReasoning.response_time_seconds.toFixed(2) }}s
+                </span>
+                <span v-if="latestRunQueryCallsReasoning && latestRunQueryCallsReasoning.length > 0" class="token-stat">
+                  <strong>Cypher queries:</strong> {{ latestRunQueryCallsReasoning.length }}
                 </span>
               </div>
             </div>
@@ -669,7 +681,7 @@ RETURN dst LIMIT 5</pre>
                   <!-- Arrow marker definition -->
                   <defs>
                     <marker id="arrowhead-reasoning" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
-                      <polygon points="0 0, 10 3, 0 6" fill="#4a90e2" />
+                      <polygon points="0 0, 10 3, 0 6" fill="#FB6E00" />
                     </marker>
                   </defs>
                   
@@ -1410,6 +1422,11 @@ export default {
           time: new Date().toLocaleTimeString()
         }
         this.chatMessages.push(botMessage)
+        // Render math after message is added
+        this.$nextTick(() => {
+          this.renderAllMath()
+          this.scrollChatToBottom()
+        })
       } catch (error) {
         const errorMessage = {
           type: 'bot',
@@ -1417,11 +1434,13 @@ export default {
           time: new Date().toLocaleTimeString()
         }
         this.chatMessages.push(errorMessage)
-      } finally {
-        this.chatLoading = false
+        // Render math after error message is added
         this.$nextTick(() => {
+          this.renderAllMath()
           this.scrollChatToBottom()
         })
+      } finally {
+        this.chatLoading = false
       }
     },
     scrollChatToBottom() {
@@ -1690,6 +1709,11 @@ export default {
           tools_used: response.data.tools_used || []
         }
         this.openaiAgentsMessages.push(agentMessage)
+        // Render math after message is added
+        this.$nextTick(() => {
+          this.renderAllMath()
+          this.scrollOpenAIAgentsChatToBottom()
+        })
       } catch (error) {
         const errorMessage = {
           type: 'bot',
@@ -1697,11 +1721,13 @@ export default {
           time: new Date().toLocaleTimeString()
         }
         this.openaiAgentsMessages.push(errorMessage)
-      } finally {
-        this.openaiAgentsLoading = false
+        // Render math after error message is added
         this.$nextTick(() => {
+          this.renderAllMath()
           this.scrollOpenAIAgentsChatToBottom()
         })
+      } finally {
+        this.openaiAgentsLoading = false
       }
     },
     async askOpenAIAgentWithPlanning() {
@@ -1739,14 +1765,23 @@ export default {
       }, 100)
 
       try {
+        const startTime = performance.now()
         const response = await axios.post('/api/openai-agents-with-planning/query', {
           question: userQuestion,
           session_id: this.openaiAgentsWithPlanningSessionId  // Send session ID for continuity
         })
+        const endTime = performance.now()
+        const responseTimeSeconds = (endTime - startTime) / 1000
 
         // Store session_id from response if we don't have one yet
         if (!this.openaiAgentsWithPlanningSessionId && response.data.session_id) {
           this.openaiAgentsWithPlanningSessionId = response.data.session_id
+        }
+
+        // Add response time to tool_call_graph if it exists
+        let toolCallGraph = response.data.tool_call_graph || null
+        if (toolCallGraph) {
+          toolCallGraph.response_time_seconds = responseTimeSeconds
         }
 
         // Add agent response
@@ -1755,10 +1790,15 @@ export default {
           text: response.data.answer || 'No answer provided.',
           time: new Date().toLocaleTimeString(),
           tools_used: response.data.tools_used || [],
-          tool_call_graph: response.data.tool_call_graph || null,
+          tool_call_graph: toolCallGraph,
           run_query_calls: response.data.run_query_calls || []
         }
         this.openaiAgentsWithPlanningMessages.push(agentMessage)
+        // Render math after message is added
+        this.$nextTick(() => {
+          this.renderAllMath()
+          this.scrollOpenAIAgentsWithPlanningChatToBottom()
+        })
       } catch (error) {
         const errorMessage = {
           type: 'bot',
@@ -1766,11 +1806,13 @@ export default {
           time: new Date().toLocaleTimeString()
         }
         this.openaiAgentsWithPlanningMessages.push(errorMessage)
-      } finally {
-        this.openaiAgentsWithPlanningLoading = false
+        // Render math after error message is added
         this.$nextTick(() => {
+          this.renderAllMath()
           this.scrollOpenAIAgentsWithPlanningChatToBottom()
         })
+      } finally {
+        this.openaiAgentsWithPlanningLoading = false
       }
     },
     async askOpenAIAgentWithReasoning() {
@@ -1808,6 +1850,7 @@ export default {
       }, 100)
 
       try {
+        const startTime = performance.now()
         // Use fetch API for SSE streaming
         const response = await fetch('/api/openai-agents-with-reasoning/query-stream', {
           method: 'POST',
@@ -1880,9 +1923,18 @@ export default {
         }
 
         if (finalResult) {
+          const endTime = performance.now()
+          const responseTimeSeconds = (endTime - startTime) / 1000
+
           // Store session_id from response if we don't have one yet
           if (!this.openaiAgentsWithReasoningSessionId && finalResult.session_id) {
             this.openaiAgentsWithReasoningSessionId = finalResult.session_id
+          }
+
+          // Add response time to tool_call_graph if it exists
+          let toolCallGraph = finalResult.tool_call_graph || null
+          if (toolCallGraph) {
+            toolCallGraph.response_time_seconds = responseTimeSeconds
           }
 
           // Add agent response
@@ -1891,7 +1943,7 @@ export default {
             text: finalResult.answer || 'No answer provided.',
             time: new Date().toLocaleTimeString(),
             tools_used: finalResult.tools_used || [],
-            tool_call_graph: finalResult.tool_call_graph || null,
+            tool_call_graph: toolCallGraph,
             run_query_calls: finalResult.run_query_calls || []
           }
           this.openaiAgentsWithReasoningMessages.push(agentMessage)
@@ -1923,31 +1975,37 @@ export default {
     renderMarkdown(text) {
       if (!text) return ''
       
-      // Extract LaTeX math blocks first before escaping HTML
+      // Extract LaTeX math blocks (both display \[...\] and inline \(...\)) first before any processing
       const mathBlocks = []
       let mathIndex = 0
+      
+      // Extract display math blocks \[...\]
       let html = text.replace(/\\\[([\s\S]*?)\\\]/g, (match, content) => {
-        const placeholder = `__MATH_BLOCK_${mathIndex}__`
-        mathBlocks.push(content)
+        const placeholder = `__MATH_DISPLAY_${mathIndex}__`
+        mathBlocks.push({ type: 'display', content: content.trim() })
         mathIndex++
         return placeholder
       })
       
-      // Escape HTML to prevent XSS
+      // Extract inline math blocks \(...\)
+      html = html.replace(/\\\(([\s\S]*?)\\\)/g, (match, content) => {
+        const placeholder = `__MATH_INLINE_${mathIndex}__`
+        mathBlocks.push({ type: 'inline', content: content.trim() })
+        mathIndex++
+        return placeholder
+      })
+      
+      // Escape HTML to prevent XSS (but preserve math placeholders)
+      // Don't escape the placeholders themselves
       html = html
-        .replace(/&/g, '&amp;')
+        .replace(/&(?!amp;|lt;|gt;|quot;|#)/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-      
-      // Restore LaTeX math blocks (unescaped, KaTeX will render them)
-      mathBlocks.forEach((mathContent, index) => {
-        html = html.replace(`__MATH_BLOCK_${index}__`, `\\[${mathContent}\\]`)
-      })
       
       // Code blocks (```code```) - handle before inline code
       html = html.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>')
       
-      // Inline code (`code`) - but not inside code blocks
+      // Inline code (`code`) - but not inside code blocks or math blocks
       html = html.replace(/`([^`\n]+?)`/g, '<code>$1</code>')
       
       // Headers (# Header)
@@ -1962,6 +2020,11 @@ export default {
       
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i]
+        // Skip processing if this line contains a math placeholder
+        if (line.includes('__MATH_')) {
+          processedLines.push(line)
+          continue
+        }
         if (line.match(/^- (.+)$/)) {
           if (!inList) {
             processedLines.push('<ul>')
@@ -1987,48 +2050,112 @@ export default {
       // Italic (*text*) - but not bold
       html = html.replace(/(?<!\*)\*([^*\n]+?)\*(?!\*)/g, '<em>$1</em>')
       
-      // Line breaks (but preserve existing <br> from code blocks)
+      // Line breaks (but preserve existing <br> from code blocks and don't break math blocks)
+      // Don't replace \n inside math placeholders
       html = html.replace(/\n/g, '<br>')
+      
+      // Restore LaTeX math blocks AFTER all other processing (unescaped, KaTeX will render them)
+      // Use a more unique placeholder to avoid conflicts
+      mathBlocks.forEach((mathBlock, index) => {
+        const placeholder = mathBlock.type === 'display' ? `__MATH_DISPLAY_${index}__` : `__MATH_INLINE_${index}__`
+        const restored = mathBlock.type === 'display' 
+          ? `\\[${mathBlock.content}\\]` 
+          : `\\(${mathBlock.content}\\)`
+        // Replace all occurrences of the placeholder (in case it appears multiple times)
+        html = html.split(placeholder).join(restored)
+      })
       
       return html
     },
     renderAllMath() {
       // Render KaTeX math in all markdown content elements
-      if (typeof window.renderMathInElement !== 'undefined') {
-        this.$nextTick(() => {
+      if (typeof window.renderMathInElement === 'undefined') {
+        console.warn('KaTeX renderMathInElement not available. Make sure KaTeX auto-render is loaded.')
+        // Try to wait a bit and retry if KaTeX is still loading
+        setTimeout(() => {
+          if (typeof window.renderMathInElement !== 'undefined') {
+            this.renderAllMath()
+          }
+        }, 500)
+        return
+      }
+      
+      this.$nextTick(() => {
+        // Use setTimeout to ensure DOM is fully updated
+        setTimeout(() => {
           const mathElements = document.querySelectorAll('.markdown-content')
           mathElements.forEach(element => {
             try {
-              // Only render if not already rendered (check for katex elements)
-              if (!element.querySelector('.katex')) {
+              // Skip if this element already has rendered math (to avoid re-rendering)
+              const hasRenderedMath = element.querySelector('.katex')
+              if (hasRenderedMath) {
+                // Check if there's unrendered math by looking at text content
+                const textContent = element.textContent || ''
+                const hasUnrenderedDelimiters = textContent.includes('\\[') || textContent.includes('\\(')
+                if (!hasUnrenderedDelimiters) {
+                  return // All math is already rendered
+                }
+              }
+              
+              // Get the text content to check for math delimiters
+              const textContent = element.textContent || ''
+              const htmlContent = element.innerHTML || ''
+              
+              // Check for math delimiters in the actual content
+              // Look for the literal backslash patterns that KaTeX expects
+              const hasMath = textContent.includes('\\[') || textContent.includes('\\(') ||
+                             htmlContent.includes('\\[') || htmlContent.includes('\\(')
+              
+              if (hasMath) {
+                // Render math - KaTeX will handle already-rendered elements via ignoredClasses
                 window.renderMathInElement(element, {
                   delimiters: [
-                    {left: '\\[', right: '\\]', display: true}
+                    {left: '\\[', right: '\\]', display: true},
+                    {left: '\\(', right: '\\)', display: false}
                   ],
-                  throwOnError: false
+                  throwOnError: false,
+                  strict: false,
+                  output: 'html',
+                  ignoredTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+                  ignoredClasses: ['katex', 'katex-display']
                 })
               }
             } catch (e) {
-              console.error('Error rendering math:', e)
+              console.error('Error rendering math in element:', e, element)
             }
           })
-        })
-      }
+        }, 300)
+      })
     },
     renderMathInElement(element) {
       // Render KaTeX math after DOM update
       if (typeof window.renderMathInElement !== 'undefined' && element) {
         this.$nextTick(() => {
-          try {
-            window.renderMathInElement(element, {
-              delimiters: [
-                {left: '\\[', right: '\\]', display: true}
-              ],
-              throwOnError: false
-            })
-          } catch (e) {
-            console.error('Error rendering math:', e)
-          }
+          setTimeout(() => {
+            try {
+              // Get the raw HTML content to check for math delimiters
+              const htmlContent = element.innerHTML || ''
+              const hasUnrenderedMath = htmlContent.includes('\\[') || htmlContent.includes('\\(')
+              
+              // Check if math has already been rendered
+              const hasRenderedMath = element.querySelector('.katex')
+              
+              // Only render if there's unrendered math and it hasn't been rendered yet
+              if (hasUnrenderedMath && !hasRenderedMath) {
+                window.renderMathInElement(element, {
+                  delimiters: [
+                    {left: '\\[', right: '\\]', display: true},
+                    {left: '\\(', right: '\\)', display: false}
+                  ],
+                  throwOnError: false,
+                  strict: false,
+                  output: 'html'
+                })
+              }
+            } catch (e) {
+              console.error('Error rendering math:', e)
+            }
+          }, 100)
         })
       }
     },
@@ -2483,7 +2610,7 @@ export default {
 
 .header {
   text-align: center;
-  color: #1a1a2e;
+  color: #231F20;
   margin-bottom: 40px;
 }
 
@@ -2498,7 +2625,7 @@ export default {
 .logo {
   width: 60px;
   height: 60px;
-  border-radius: 12px;
+  border-radius: 8px;
   object-fit: contain;
   background: rgba(255, 255, 255, 0.9);
   padding: 6px;
@@ -2510,13 +2637,15 @@ export default {
   font-size: 2.5rem;
   margin: 0;
   font-weight: 600;
-  color: #1a1a2e;
+  color: #231F20;
+  font-family: 'Inter', sans-serif;
 }
 
 .subtitle {
   font-size: 1.2rem;
   opacity: 0.8;
-  color: #495057;
+  color: #646265;
+  font-weight: 400;
 }
 
 .main-content {
@@ -2526,21 +2655,25 @@ export default {
 }
 
 .card {
-  background: white;
-  border: 1px solid #e9ecef;
-  border-radius: 12px;
+  background: #FFFFFF;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
   padding: 30px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
 }
 
 .card h2 {
   margin-bottom: 20px;
-  color: #1a1a2e;
+  color: #231F20;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 .card h3 {
   margin-bottom: 10px;
-  color: #1a1a2e;
+  color: #231F20;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 .form {
@@ -2556,42 +2689,44 @@ export default {
 }
 
 .form-group label {
-  font-weight: 600;
-  color: #495057;
+  font-weight: 400;
+  color: #231F20;
 }
 
 .textarea {
   width: 100%;
   padding: 12px;
-  background: #ffffff;
-  border: 2px solid #dee2e6;
-  border-radius: 8px;
+  background: #FFFFFF;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
   font-size: 14px;
-  font-family: inherit;
+  font-family: 'Inter', sans-serif;
+  font-weight: 400;
   resize: vertical;
   transition: border-color 0.3s;
-  color: #212529;
+  color: #231F20;
 }
 
 .textarea:focus {
   outline: none;
-  border-color: #4a90e2;
+  border-color: #FB6E00;
 }
 
 .estimate-info {
-  background: #f8f9fa;
-  border: 1px solid #4a90e2;
-  border-radius: 8px;
+  background: #F9F9F9;
+  border: 1px solid #FB6E00;
+  border-radius: 6px;
   padding: 16px;
   margin-bottom: 20px;
 }
 
 .estimate-summary {
   font-size: 14px;
-  color: #1a1a2e;
+  color: #231F20;
+  font-weight: 400;
   margin-bottom: 12px;
   padding-bottom: 12px;
-  border-bottom: 1px solid #dee2e6;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .estimate-item {
@@ -2603,7 +2738,8 @@ export default {
 }
 
 .estimate-url {
-  color: #495057;
+  color: #646265;
+  font-weight: 400;
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2612,8 +2748,8 @@ export default {
 }
 
 .estimate-details {
-  color: #1a1a2e;
-  font-weight: 500;
+  color: #231F20;
+  font-weight: 400;
   white-space: nowrap;
 }
 
@@ -2624,7 +2760,7 @@ export default {
 .progress-item {
   margin-bottom: 16px;
   padding-bottom: 16px;
-  border-bottom: 1px solid #e9ecef;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .progress-item:last-child {
@@ -2641,8 +2777,9 @@ export default {
 }
 
 .progress-url {
-  color: #1a1a2e;
+  color: #231F20;
   font-size: 14px;
+  font-weight: 400;
   flex: 1;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2654,32 +2791,32 @@ export default {
   font-size: 12px;
   font-weight: 600;
   padding: 4px 12px;
-  border-radius: 12px;
+  border-radius: 6px;
   text-transform: uppercase;
 }
 
 .progress-status.processing {
-  background: #e3f2fd;
-  color: #1976d2;
-  border: 1px solid #90caf9;
+  background: #F9F9F9;
+  color: #FB6E00;
+  border: 1px solid #FB6E00;
 }
 
 .progress-status.completed {
-  background: #e8f5e9;
-  color: #388e3c;
-  border: 1px solid #a5d6a7;
+  background: #F9F9F9;
+  color: #231F20;
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .progress-status.error {
-  background: #ffebee;
-  color: #d32f2f;
-  border: 1px solid #ef9a9a;
+  background: #F9F9F9;
+  color: #DC2223;
+  border: 1px solid #DC2223;
 }
 
 .progress-bar {
   width: 100%;
   height: 8px;
-  background: #e9ecef;
+  background: #F9F9F9;
   border-radius: 4px;
   overflow: hidden;
   margin-bottom: 8px;
@@ -2687,13 +2824,14 @@ export default {
 
 .progress-bar-fill {
   height: 100%;
-  background: linear-gradient(90deg, #4a90e2 0%, #357abd 100%);
+  background: linear-gradient(30deg, #FFC500 0%, #DC2223 41%, #720096 100%);
   transition: width 0.3s ease;
 }
 
 .progress-time {
   font-size: 12px;
-  color: #6c757d;
+  color: #646265;
+  font-weight: 400;
 }
 
 .form-options {
@@ -2718,21 +2856,22 @@ export default {
 .btn {
   padding: 12px 24px;
   border: none;
-  border-radius: 8px;
+  border-radius: 6px;
   font-size: 16px;
   font-weight: 600;
+  font-family: 'Inter', sans-serif;
   cursor: pointer;
   transition: all 0.3s;
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
-  color: white;
+  background: linear-gradient(30deg, #FFC500 0%, #DC2223 41%, #720096 100%);
+  color: #FFFFFF;
 }
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(74, 144, 226, 0.4);
+  box-shadow: 0 4px 12px rgba(251, 110, 0, 0.3);
 }
 
 .btn-primary:disabled {
@@ -2745,50 +2884,55 @@ export default {
 }
 
 .message h3 {
-  color: #1a1a2e;
+  color: #231F20;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 .message p {
-  color: #495057;
+  color: #231F20;
+  font-weight: 400;
 }
 
 .message.success {
-  border-color: #4a90e2;
-  background: #f0f4f8;
+  border-color: #FB6E00;
+  background: #FFFFFF;
 }
 
 .message.error {
-  border-color: #ef4444;
-  background: #fff5f5;
+  border-color: #DC2223;
+  background: #FFFFFF;
 }
 
 .message.info {
-  border-color: #4a90e2;
-  background: #f0f4f8;
+  border-color: #FB6E00;
+  background: #FFFFFF;
   padding: 20px;
-  border-radius: 8px;
+  border-radius: 6px;
 }
 
 .status {
-  background: #f8f9fa;
+  background: #FFFFFF;
 }
 
 .status pre {
-  background: #1a1a2e;
-  color: #f8f9fa;
+  background: #231F20;
+  color: #FFFFFF;
   padding: 16px;
-  border-radius: 8px;
+  border-radius: 6px;
   overflow-x: auto;
   font-size: 14px;
+  font-weight: 400;
   line-height: 1.5;
-  border: 1px solid #e9ecef;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  font-family: 'Inter', monospace;
 }
 
 .tabs {
   display: flex;
   gap: 8px;
   margin-bottom: 20px;
-  border-bottom: 2px solid #e9ecef;
+  border-bottom: 2px solid rgba(0, 0, 0, 0.08);
 }
 
 .tab-button {
@@ -2798,20 +2942,21 @@ export default {
   border-bottom: 3px solid transparent;
   font-size: 16px;
   font-weight: 600;
-  color: #6c757d;
+  font-family: 'Inter', sans-serif;
+  color: #646265;
   cursor: pointer;
   transition: all 0.3s;
   margin-bottom: -2px;
 }
 
 .tab-button:hover {
-  color: #1a1a2e;
-  background: #f8f9fa;
+  color: #231F20;
+  background: #F9F9F9;
 }
 
 .tab-button.active {
-  color: #4a90e2;
-  border-bottom-color: #4a90e2;
+  color: #FB6E00;
+  border-bottom-color: #FB6E00;
 }
 
 .retrieval-content {
@@ -2828,9 +2973,9 @@ export default {
 .retrieval-sidebar {
   width: 250px;
   flex-shrink: 0;
-  background: white;
-  border: 1px solid #e9ecef;
-  border-radius: 12px;
+  background: #FFFFFF;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
   padding: 24px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   display: flex;
@@ -2839,9 +2984,10 @@ export default {
 
 .retrieval-sidebar h2 {
   margin: 0 0 24px 0;
-  color: #1a1a2e;
+  color: #231F20;
   font-size: 20px;
   font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 .retrieval-main-content {
@@ -2864,11 +3010,12 @@ export default {
 .retrieval-tab-button-vertical {
   padding: 14px 18px;
   background: transparent;
-  border: 2px solid #e9ecef;
-  border-radius: 8px;
+  border: 2px solid rgba(0, 0, 0, 0.08);
+  border-radius: 6px;
   font-size: 14px;
   font-weight: 600;
-  color: #6c757d;
+  font-family: 'Inter', sans-serif;
+  color: #646265;
   cursor: pointer;
   transition: all 0.3s;
   text-align: left;
@@ -2876,16 +3023,16 @@ export default {
 }
 
 .retrieval-tab-button-vertical:hover {
-  color: #1a1a2e;
-  background: #f8f9fa;
-  border-color: #dee2e6;
+  color: #231F20;
+  background: #F9F9F9;
+  border-color: rgba(0, 0, 0, 0.1);
 }
 
 .retrieval-tab-button-vertical.active {
-  color: #4a90e2;
-  background: #f0f4f8;
-  border-color: #4a90e2;
-  box-shadow: 0 2px 4px rgba(74, 144, 226, 0.1);
+  color: #FB6E00;
+  background: #FFFFFF;
+  border-color: #FB6E00;
+  box-shadow: 0 2px 4px rgba(251, 110, 0, 0.1);
 }
 
 .method-tooltip {
@@ -2895,9 +3042,9 @@ export default {
   width: 400px;
   max-height: 80vh;
   overflow-y: auto;
-  background: white;
-  border: 2px solid #4a90e2;
-  border-radius: 12px;
+  background: #FFFFFF;
+  border: 2px solid #FB6E00;
+  border-radius: 8px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
   z-index: 1000;
   opacity: 0;
@@ -2920,15 +3067,17 @@ export default {
 
 .method-description-tooltip h3 {
   margin: 0 0 12px 0;
-  color: #1a1a2e;
+  color: #231F20;
   font-size: 18px;
   font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 .method-description-tooltip .method-summary {
   margin: 0 0 16px 0;
-  color: #495057;
+  color: #646265;
   font-size: 14px;
+  font-weight: 400;
   line-height: 1.6;
 }
 
@@ -2939,27 +3088,32 @@ export default {
 .method-description-tooltip .query-display strong {
   display: block;
   margin-bottom: 8px;
-  color: #1a1a2e;
+  color: #231F20;
   font-size: 14px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 .method-description-tooltip .query-code {
-  background: #1a1a2e;
-  color: #f8f9fa;
+  background: #231F20;
+  color: #FFFFFF;
   padding: 12px;
-  border-radius: 8px;
+  border-radius: 6px;
   font-size: 12px;
+  font-weight: 400;
   line-height: 1.5;
   overflow-x: auto;
   margin: 0;
-  border: 1px solid #e9ecef;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  font-family: 'Inter', monospace;
 }
 
 .method-description-tooltip .method-features {
   margin: 0;
   padding-left: 20px;
-  color: #495057;
+  color: #646265;
   font-size: 14px;
+  font-weight: 400;
   line-height: 1.8;
 }
 
@@ -3000,24 +3154,26 @@ export default {
   align-items: center;
   margin-bottom: 20px;
   padding-bottom: 16px;
-  border-bottom: 2px solid #e9ecef;
+  border-bottom: 2px solid rgba(0, 0, 0, 0.08);
 }
 
 .chat-header h3 {
   margin: 0;
-  color: #1a1a2e;
+  color: #231F20;
   font-size: 20px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 .btn-icon {
-  background: #f8f9fa;
-  border: 2px solid #dee2e6;
-  border-radius: 8px;
+  background: #F9F9F9;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
   padding: 8px 12px;
   font-size: 18px;
   cursor: pointer;
   transition: all 0.3s;
-  color: #495057;
+  color: #646265;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3026,9 +3182,9 @@ export default {
 }
 
 .btn-icon:hover {
-  background: #e9ecef;
-  border-color: #4a90e2;
-  color: #4a90e2;
+  background: #FFFFFF;
+  border-color: #FB6E00;
+  color: #FB6E00;
   transform: scale(1.05);
 }
 
@@ -3040,13 +3196,13 @@ export default {
   flex: 1;
   overflow-y: auto;
   padding: 20px;
-  background: linear-gradient(to bottom, #ffffff 0%, #f8f9fa 100%);
-  border-radius: 12px;
+  background: #FFFFFF;
+  border-radius: 8px;
   margin-bottom: 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;
-  border: 1px solid #e9ecef;
+  border: 1px solid rgba(0, 0, 0, 0.08);
   box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
@@ -3055,17 +3211,17 @@ export default {
 }
 
 .chat-messages::-webkit-scrollbar-track {
-  background: #f1f1f1;
+  background: #F9F9F9;
   border-radius: 4px;
 }
 
 .chat-messages::-webkit-scrollbar-thumb {
-  background: #c1c1c1;
+  background: #646265;
   border-radius: 4px;
 }
 
 .chat-messages::-webkit-scrollbar-thumb:hover {
-  background: #a8a8a8;
+  background: #231F20;
 }
 
 .chat-message {
@@ -3100,7 +3256,7 @@ export default {
   border-radius: 50%;
   flex-shrink: 0;
   overflow: hidden;
-  border: 2px solid #e9ecef;
+  border: 2px solid rgba(0, 0, 0, 0.08);
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
@@ -3124,10 +3280,11 @@ export default {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
-  color: white;
+  background: linear-gradient(30deg, #FFC500 0%, #DC2223 41%, #720096 100%);
+  color: #FFFFFF;
   font-weight: 600;
   font-size: 14px;
+  font-family: 'Inter', sans-serif;
 }
 
 .typing-indicator {
@@ -3136,9 +3293,9 @@ export default {
 
 .typing-content {
   padding: 16px 20px;
-  background: white;
+  background: #FFFFFF;
   border-bottom-left-radius: 4px;
-  border-left: 3px solid #4a90e2;
+  border-left: 3px solid #FB6E00;
 }
 
 .typing-dots {
@@ -3151,7 +3308,7 @@ export default {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #4a90e2;
+  background: #FB6E00;
   animation: typing 1.4s infinite ease-in-out;
 }
 
@@ -3181,8 +3338,8 @@ export default {
 .message-content {
   max-width: 75%;
   padding: 14px 18px;
-  border-radius: 16px;
-  background: white;
+  border-radius: 8px;
+  background: #FFFFFF;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   transition: transform 0.2s ease;
 }
@@ -3193,24 +3350,24 @@ export default {
 }
 
 .chat-message.user .message-content {
-  background: linear-gradient(135deg, #4a90e2 0%, #357abd 100%);
-  color: white;
+  background: linear-gradient(30deg, #FFC500 0%, #DC2223 41%, #720096 100%);
+  color: #FFFFFF;
   border-bottom-right-radius: 4px;
 }
 
 .chat-message.bot .message-content {
-  background: white;
-  color: #1a1a2e;
+  background: #FFFFFF;
+  color: #231F20;
   border-bottom-left-radius: 4px;
-  border-left: 3px solid #4a90e2;
+  border-left: 3px solid #FB6E00;
 }
 
 .chat-message.temp .message-content,
 .chat-message.temp-message .message-content {
-  background: #f0f7ff;
-  color: #1a1a2e;
+  background: #F9F9F9;
+  color: #231F20;
   border-bottom-left-radius: 4px;
-  border-left: 3px solid #4a90e2;
+  border-left: 3px solid #FB6E00;
   font-style: italic;
   opacity: 0.8;
   padding: 8px 12px;
@@ -3220,7 +3377,7 @@ export default {
 
 .chat-message.temp .message-header,
 .chat-message.temp-message .message-header {
-  color: #4a90e2;
+  color: #FB6E00;
   font-size: 0.85em;
   margin-bottom: 4px;
 }
@@ -3268,6 +3425,8 @@ export default {
 .markdown-content h3 {
   margin: 12px 0 8px 0;
   font-weight: 600;
+  font-family: 'Inter', sans-serif;
+  color: #231F20;
 }
 
 .markdown-content h1 {
@@ -3283,15 +3442,17 @@ export default {
 }
 
 .markdown-content code {
-  background: #f4f4f4;
+  background: #F9F9F9;
   padding: 2px 6px;
   border-radius: 3px;
-  font-family: 'Courier New', monospace;
+  font-family: 'Inter', monospace;
   font-size: 0.9em;
+  font-weight: 400;
+  color: #231F20;
 }
 
 .markdown-content pre {
-  background: #f4f4f4;
+  background: #F9F9F9;
   padding: 12px;
   border-radius: 4px;
   overflow-x: auto;
@@ -3314,6 +3475,7 @@ export default {
 
 .markdown-content strong {
   font-weight: 600;
+  color: #231F20;
 }
 
 .markdown-content em {
@@ -3323,8 +3485,8 @@ export default {
 .markdown-content .katex-display {
   margin: 12px 0;
   padding: 8px;
-  background: #f9f9f9;
-  border-left: 3px solid #4a90e2;
+  background: #F9F9F9;
+  border-left: 3px solid #FB6E00;
   overflow-x: auto;
 }
 
@@ -3341,7 +3503,8 @@ export default {
 .tools-used-header {
   font-size: 12px;
   font-weight: 600;
-  color: #4a90e2;
+  color: #FB6E00;
+  font-family: 'Inter', sans-serif;
   margin-bottom: 8px;
   display: flex;
   justify-content: space-between;
@@ -3350,12 +3513,13 @@ export default {
 
 .btn-tool-graph {
   padding: 4px 12px;
-  background: #f8f9fa;
-  border: 1px solid #dee2e6;
-  border-radius: 6px;
+  background: #F9F9F9;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
   font-size: 11px;
   font-weight: 600;
-  color: #4a90e2;
+  font-family: 'Inter', sans-serif;
+  color: #FB6E00;
   cursor: pointer;
   transition: all 0.2s;
   display: inline-flex;
@@ -3364,14 +3528,14 @@ export default {
 }
 
 .btn-tool-graph:hover {
-  background: #e9ecef;
-  border-color: #4a90e2;
+  background: #FFFFFF;
+  border-color: #FB6E00;
 }
 
 .btn-tool-graph.active {
-  background: #4a90e2;
-  color: white;
-  border-color: #4a90e2;
+  background: linear-gradient(30deg, #FFC500 0%, #DC2223 41%, #720096 100%);
+  color: #FFFFFF;
+  border-color: #FB6E00;
 }
 
 .tool-call-graph-section {
@@ -3387,15 +3551,16 @@ export default {
   margin-bottom: 12px;
   font-size: 12px;
   font-weight: 600;
-  color: #4a90e2;
+  font-family: 'Inter', sans-serif;
+  color: #FB6E00;
 }
 
 .tool-graph-container {
   margin: 16px 0;
   padding: 16px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  border: 1px solid #dee2e6;
+  background: #F9F9F9;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
   overflow-x: auto;
   transition: all 0.3s ease;
 }
@@ -3410,7 +3575,7 @@ export default {
   margin: 0;
   padding: 20px;
   border-radius: 0;
-  background: white;
+  background: #FFFFFF;
   overflow: auto;
   display: flex;
   flex-direction: column;
@@ -3429,16 +3594,18 @@ export default {
 
 .trace-visualization-card .stats-header h3 {
   margin: 0;
-  color: #1a1a2e;
+  color: #231F20;
   font-size: 20px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 .tool-graph-container-retrieval {
   margin-top: 16px;
   padding: 16px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  border: 1px solid #dee2e6;
+  background: #F9F9F9;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -3447,13 +3614,15 @@ export default {
 .tool-graph-container-retrieval .node-details-section {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid #dee2e6;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .tool-graph-container-retrieval .node-details-section h4 {
   margin: 0 0 8px 0;
-  color: #1a1a2e;
+  color: #231F20;
   font-size: 16px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 .tool-graph-container-retrieval .node-details-textarea {
@@ -3464,21 +3633,23 @@ export default {
 .tool-graph-container-retrieval .run-query-calls-section {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid #dee2e6;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .tool-graph-container-retrieval .run-query-calls-section h4 {
   margin: 0 0 8px 0;
-  color: #1a1a2e;
+  color: #231F20;
   font-size: 16px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 .tool-graph-container-full {
   margin: 20px 0;
   padding: 20px;
-  background: #f8f9fa;
-  border-radius: 12px;
-  border: 1px solid #dee2e6;
+  background: #F9F9F9;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
   overflow: hidden;
   min-height: 400px;
   display: flex;
@@ -3491,16 +3662,17 @@ export default {
   align-items: center;
   margin-bottom: 12px;
   padding: 8px;
-  background: white;
-  border-radius: 8px;
-  border: 1px solid #dee2e6;
+  background: #FFFFFF;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .zoom-level {
   margin-left: 8px;
   font-size: 14px;
   font-weight: 600;
-  color: #495057;
+  font-family: 'Inter', sans-serif;
+  color: #231F20;
   min-width: 50px;
 }
 
@@ -3511,13 +3683,15 @@ export default {
   align-items: center;
   margin-bottom: 20px;
   padding-bottom: 16px;
-  border-bottom: 2px solid #e9ecef;
+  border-bottom: 2px solid rgba(0, 0, 0, 0.08);
   flex-shrink: 0;
 }
 
 .tool-graph-fullscreen-header strong {
   font-size: 18px;
-  color: #1a1a2e;
+  color: #231F20;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 .tool-graph-visualization {
@@ -3535,21 +3709,22 @@ export default {
 }
 
 .tool-graph-svg {
-  border: 1px solid #dee2e6;
-  border-radius: 8px;
-  background: white;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
+  background: #FFFFFF;
 }
 
 .graph-edge {
-  stroke: #4a90e2;
+  stroke: #FB6E00;
   stroke-width: 2;
   fill: none;
 }
 
 .graph-edge-label {
   font-size: 10px;
-  fill: #6c757d;
-  font-weight: 500;
+  fill: #646265;
+  font-weight: 400;
+  font-family: 'Inter', sans-serif;
 }
 
 .graph-node {
@@ -3575,7 +3750,7 @@ export default {
 }
 
 .graph-node-agent {
-  fill: #4a90e2;
+  fill: #FB6E00;
 }
 
 .graph-node-function {
@@ -3607,43 +3782,47 @@ export default {
 }
 
 .graph-node-span {
-  fill: #6c757d;
+  fill: #646265;
 }
 
 .graph-node-unknown {
-  fill: #6c757d;
+  fill: #646265;
 }
 
 .graph-node-label {
   font-size: 10px;
   font-weight: 600;
-  fill: #1a1a2e;
+  font-family: 'Inter', sans-serif;
+  fill: #231F20;
   pointer-events: none;
 }
 
 .node-details-section {
   margin-top: 20px;
   padding-top: 20px;
-  border-top: 2px solid #e9ecef;
+  border-top: 2px solid rgba(0, 0, 0, 0.08);
 }
 
 .node-details-section h3 {
   margin: 0 0 12px 0;
-  color: #1a1a2e;
+  color: #231F20;
   font-size: 18px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 .node-details-textarea {
   width: 100%;
   min-height: 300px;
   padding: 16px;
-  background: #f8f9fa;
-  border: 2px solid #dee2e6;
-  border-radius: 8px;
+  background: #F9F9F9;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
   font-size: 13px;
-  font-family: 'Courier New', monospace;
+  font-family: 'Inter', monospace;
+  font-weight: 400;
   resize: vertical;
-  color: #1a1a2e;
+  color: #231F20;
   line-height: 1.6;
   white-space: pre-wrap;
   word-wrap: break-word;
@@ -3651,8 +3830,8 @@ export default {
 
 .node-details-textarea:focus {
   outline: none;
-  border-color: #4a90e2;
-  background: white;
+  border-color: #FB6E00;
+  background: #FFFFFF;
 }
 
 .run-query-calls-section {
@@ -3661,13 +3840,16 @@ export default {
 
 .run-query-calls-section h3 {
   margin-bottom: 12px;
-  color: #1a1a2e;
+  color: #231F20;
   font-size: 20px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 .section-description {
-  color: #6c757d;
+  color: #646265;
   font-size: 14px;
+  font-weight: 400;
   margin-bottom: 20px;
   font-style: italic;
 }
@@ -3679,16 +3861,16 @@ export default {
 }
 
 .run-query-item {
-  background: #f8f9fa;
-  border: 1px solid #dee2e6;
-  border-radius: 8px;
+  background: #FFFFFF;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
   padding: 16px;
   transition: all 0.2s ease;
 }
 
 .run-query-item:hover {
-  border-color: #4a90e2;
-  box-shadow: 0 2px 8px rgba(74, 144, 226, 0.1);
+  border-color: #FB6E00;
+  box-shadow: 0 2px 8px rgba(251, 110, 0, 0.1);
 }
 
 .run-query-header {
@@ -3697,7 +3879,7 @@ export default {
   align-items: center;
   margin-bottom: 12px;
   padding-bottom: 8px;
-  border-bottom: 1px solid #dee2e6;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .run-query-header-right {
@@ -3707,38 +3889,40 @@ export default {
 }
 
 .btn-toggle-result {
-  background: #4a90e2;
-  color: white;
+  background: #FB6E00;
+  color: #FFFFFF;
   border: none;
   padding: 4px 12px;
   border-radius: 4px;
   font-size: 12px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
   cursor: pointer;
   transition: background 0.2s;
-  font-family: inherit;
 }
 
 .btn-toggle-result:hover {
-  background: #357abd;
+  background: #DC2223;
 }
 
 .btn-toggle-result.expanded {
-  background: #6c757d;
+  background: #646265;
 }
 
 .btn-toggle-result.expanded:hover {
-  background: #5a6268;
+  background: #231F20;
 }
 
 .run-query-result {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid #dee2e6;
+  border-top: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .run-query-result-header {
   font-weight: 600;
-  color: #28a745;
+  font-family: 'Inter', sans-serif;
+  color: #231F20;
   font-size: 14px;
   margin-bottom: 8px;
 }
@@ -3746,13 +3930,14 @@ export default {
 .run-query-result-code {
   margin: 0;
   padding: 12px;
-  background: #f0f8ff;
-  border: 1px solid #b3d9ff;
-  border-radius: 6px;
-  font-family: 'Courier New', monospace;
+  background: #F9F9F9;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  font-family: 'Inter', monospace;
   font-size: 12px;
+  font-weight: 400;
   line-height: 1.6;
-  color: #212529;
+  color: #231F20;
   overflow-x: auto;
   white-space: pre-wrap;
   word-wrap: break-word;
@@ -3762,29 +3947,32 @@ export default {
 
 .run-query-index {
   font-weight: 600;
-  color: #4a90e2;
+  font-family: 'Inter', sans-serif;
+  color: #FB6E00;
   font-size: 14px;
 }
 
 .run-query-context {
   font-size: 12px;
-  color: #6c757d;
-  background: #e9ecef;
+  font-weight: 400;
+  color: #646265;
+  background: #F9F9F9;
   padding: 4px 8px;
   border-radius: 4px;
-  font-family: 'Courier New', monospace;
+  font-family: 'Inter', monospace;
 }
 
 .run-query-code {
   margin: 0;
   padding: 12px;
-  background: #ffffff;
-  border: 1px solid #e9ecef;
-  border-radius: 6px;
-  font-family: 'Courier New', monospace;
+  background: #FFFFFF;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
+  font-family: 'Inter', monospace;
   font-size: 13px;
+  font-weight: 400;
   line-height: 1.6;
-  color: #212529;
+  color: #231F20;
   overflow-x: auto;
   white-space: pre-wrap;
   word-wrap: break-word;
@@ -3793,9 +3981,9 @@ export default {
 .tool-item {
   margin-bottom: 8px;
   padding: 8px 12px;
-  background: #f8f9fa;
-  border-radius: 8px;
-  border-left: 3px solid #4a90e2;
+  background: #FFFFFF;
+  border-radius: 6px;
+  border-left: 3px solid #FB6E00;
 }
 
 .tool-header-row {
@@ -3807,32 +3995,35 @@ export default {
 
 .tool-name {
   font-weight: 600;
-  color: #1a1a2e;
+  font-family: 'Inter', sans-serif;
+  color: #231F20;
   font-size: 13px;
 }
 
 .nested-tools-badge {
   font-size: 11px;
   font-weight: 600;
-  color: #4a90e2;
-  background: #e3f2fd;
+  font-family: 'Inter', sans-serif;
+  color: #FB6E00;
+  background: #F9F9F9;
   padding: 2px 8px;
-  border-radius: 12px;
-  border: 1px solid #90caf9;
+  border-radius: 6px;
+  border: 1px solid #FB6E00;
 }
 
 .nested-tools {
   margin-top: 12px;
   padding-top: 12px;
-  border-top: 1px solid rgba(74, 144, 226, 0.2);
+  border-top: 1px solid rgba(251, 110, 0, 0.2);
   padding-left: 16px;
-  border-left: 2px solid #90caf9;
+  border-left: 2px solid #FB6E00;
 }
 
 .nested-tools-header {
   font-size: 11px;
   font-weight: 600;
-  color: #495057;
+  font-family: 'Inter', sans-serif;
+  color: #231F20;
   margin-bottom: 8px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -3841,14 +4032,15 @@ export default {
 .nested-tool-item {
   margin-bottom: 8px;
   padding: 6px 10px;
-  background: white;
-  border-radius: 6px;
-  border-left: 2px solid #90caf9;
+  background: #FFFFFF;
+  border-radius: 4px;
+  border-left: 2px solid #FB6E00;
 }
 
 .nested-tool-name {
   font-weight: 600;
-  color: #1976d2;
+  font-family: 'Inter', sans-serif;
+  color: #FB6E00;
   font-size: 12px;
 }
 
@@ -3858,23 +4050,26 @@ export default {
 
 .tool-arguments summary {
   font-size: 12px;
-  color: #6c757d;
+  font-weight: 400;
+  color: #646265;
   cursor: pointer;
   user-select: none;
 }
 
 .tool-arguments summary:hover {
-  color: #4a90e2;
+  color: #FB6E00;
 }
 
 .tool-arguments pre {
   margin-top: 6px;
   padding: 8px;
-  background: white;
+  background: #FFFFFF;
   border-radius: 4px;
   font-size: 11px;
+  font-weight: 400;
   overflow-x: auto;
-  border: 1px solid #dee2e6;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  font-family: 'Inter', monospace;
 }
 
 .conversation-history-section {
@@ -3885,12 +4080,13 @@ export default {
 
 .btn-conversation-history {
   padding: 6px 12px;
-  background: #f8f9fa;
-  border: 1px solid #dee2e6;
-  border-radius: 6px;
+  background: #F9F9F9;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 4px;
   font-size: 12px;
   font-weight: 600;
-  color: #4a90e2;
+  font-family: 'Inter', sans-serif;
+  color: #FB6E00;
   cursor: pointer;
   transition: all 0.2s;
   display: inline-flex;
@@ -3899,44 +4095,44 @@ export default {
 }
 
 .btn-conversation-history:hover {
-  background: #e9ecef;
-  border-color: #4a90e2;
+  background: #FFFFFF;
+  border-color: #FB6E00;
 }
 
 .btn-conversation-history.active {
-  background: #4a90e2;
-  color: white;
-  border-color: #4a90e2;
+  background: linear-gradient(30deg, #FFC500 0%, #DC2223 41%, #720096 100%);
+  color: #FFFFFF;
+  border-color: #FB6E00;
 }
 
 .conversation-history-content {
   margin-top: 12px;
   max-height: 500px;
   overflow-y: auto;
-  border: 1px solid #dee2e6;
-  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
   padding: 12px;
-  background: #f8f9fa;
+  background: #F9F9F9;
 }
 
 .conversation-entry {
   margin-bottom: 12px;
   padding: 10px;
-  background: white;
-  border-radius: 6px;
-  border-left: 3px solid #dee2e6;
+  background: #FFFFFF;
+  border-radius: 4px;
+  border-left: 3px solid rgba(0, 0, 0, 0.1);
 }
 
 .conversation-entry-user {
-  border-left-color: #4a90e2;
+  border-left-color: #FB6E00;
 }
 
 .conversation-entry-assistant {
-  border-left-color: #28a745;
+  border-left-color: #231F20;
 }
 
 .conversation-entry-tool {
-  border-left-color: #ffc107;
+  border-left-color: #FB6E00;
 }
 
 .conversation-entry-header {
@@ -3949,15 +4145,17 @@ export default {
 }
 
 .conversation-entry-role {
-  color: #495057;
+  color: #231F20;
+  font-weight: 400;
 }
 
 .conversation-entry-type {
   padding: 2px 8px;
-  background: #e9ecef;
+  background: #F9F9F9;
   border-radius: 4px;
-  color: #6c757d;
+  color: #646265;
   font-size: 10px;
+  font-weight: 400;
   text-transform: uppercase;
 }
 
@@ -3968,15 +4166,17 @@ export default {
 .conversation-entry-content {
   margin: 0;
   padding: 8px;
-  background: #f8f9fa;
+  background: #F9F9F9;
   border-radius: 4px;
   font-size: 12px;
+  font-weight: 400;
   line-height: 1.5;
   white-space: pre-wrap;
   word-wrap: break-word;
   overflow-x: auto;
   max-height: 300px;
   overflow-y: auto;
+  color: #231F20;
 }
 
 .tool-call-info {
@@ -3984,7 +4184,9 @@ export default {
 }
 
 .tool-call-info strong {
-  color: #495057;
+  color: #231F20;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 .chat-form {
@@ -4000,30 +4202,26 @@ export default {
 .chat-input {
   flex: 1;
   padding: 14px 16px;
-  border: 2px solid #dee2e6;
-  border-radius: 12px;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
   font-size: 14px;
-  font-family: inherit;
+  font-family: 'Inter', sans-serif;
+  font-weight: 400;
   resize: none;
   transition: all 0.3s;
-  color: #212529;
-  background: white;
+  color: #231F20;
+  background: #FFFFFF;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
 .chat-input:focus {
   outline: none;
-  border-color: #4a90e2;
-  box-shadow: 0 0 0 3px rgba(74, 144, 226, 0.1);
-}
-
-.chat-input:focus {
-  outline: none;
-  border-color: #4a90e2;
+  border-color: #FB6E00;
+  box-shadow: 0 0 0 3px rgba(251, 110, 0, 0.1);
 }
 
 .chat-input:disabled {
-  background: #f8f9fa;
+  background: #F9F9F9;
   cursor: not-allowed;
 }
 
@@ -4048,18 +4246,21 @@ export default {
   gap: 16px;
   align-items: center;
   padding: 8px 16px;
-  background: #f0f4f8;
-  border-radius: 8px;
-  border: 1px solid #dee2e6;
+  background: #F9F9F9;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .token-stat {
   font-size: 14px;
-  color: #495057;
+  font-weight: 400;
+  color: #646265;
 }
 
 .token-stat strong {
-  color: #1a1a2e;
+  color: #231F20;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
   margin-right: 4px;
 }
 
@@ -4076,9 +4277,9 @@ export default {
 }
 
 .stat-card {
-  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
-  border: 2px solid #e9ecef;
-  border-radius: 12px;
+  background: #FFFFFF;
+  border: 2px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
   padding: 24px;
   display: flex;
   align-items: flex-start;
@@ -4090,7 +4291,7 @@ export default {
 .stat-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  border-color: #4a90e2;
+  border-color: #FB6E00;
 }
 
 .stat-icon {
@@ -4106,7 +4307,8 @@ export default {
 .stat-label {
   font-size: 14px;
   font-weight: 600;
-  color: #6c757d;
+  font-family: 'Inter', sans-serif;
+  color: #646265;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 8px;
@@ -4115,22 +4317,25 @@ export default {
 .stat-value {
   font-size: 36px;
   font-weight: 700;
-  color: #1a1a2e;
+  font-family: 'Inter', sans-serif;
+  color: #231F20;
   margin-bottom: 8px;
   line-height: 1.2;
 }
 
 .stat-description {
   font-size: 13px;
-  color: #6c757d;
+  font-weight: 400;
+  color: #646265;
   line-height: 1.4;
 }
 
 .stats-empty {
   text-align: center;
   padding: 60px 20px;
-  color: #6c757d;
+  color: #646265;
   font-size: 16px;
+  font-weight: 400;
 }
 
 .header-buttons {
@@ -4140,13 +4345,13 @@ export default {
 }
 
 .btn-secondary {
-  background: linear-gradient(135deg, #6c757d 0%, #495057 100%);
-  color: white;
+  background: #646265;
+  color: #FFFFFF;
 }
 
 .btn-secondary:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(108, 117, 125, 0.4);
+  box-shadow: 0 4px 12px rgba(100, 98, 101, 0.3);
 }
 
 .btn-secondary:disabled {
@@ -4162,13 +4367,13 @@ export default {
 }
 
 .mcp-test-result.success {
-  background: #f0f4f8;
-  border-color: #4a90e2;
+  background: #FFFFFF;
+  border-color: #FB6E00;
 }
 
 .mcp-test-result.error {
-  background: #fff5f5;
-  border-color: #ef4444;
+  background: #FFFFFF;
+  border-color: #DC2223;
 }
 
 .mcp-test-header {
@@ -4181,19 +4386,20 @@ export default {
 
 .mcp-test-status {
   font-weight: 600;
+  font-family: 'Inter', sans-serif;
   padding: 4px 12px;
-  border-radius: 12px;
+  border-radius: 6px;
   font-size: 14px;
 }
 
 .mcp-test-result.success .mcp-test-status {
-  background: #e8f5e9;
-  color: #388e3c;
+  background: #F9F9F9;
+  color: #231F20;
 }
 
 .mcp-test-result.error .mcp-test-status {
-  background: #ffebee;
-  color: #d32f2f;
+  background: #F9F9F9;
+  color: #DC2223;
 }
 
 .mcp-test-details {
@@ -4201,7 +4407,8 @@ export default {
   flex-direction: column;
   gap: 8px;
   font-size: 14px;
-  color: #495057;
+  font-weight: 400;
+  color: #231F20;
 }
 
 .mcp-test-details p {
@@ -4209,8 +4416,9 @@ export default {
 }
 
 .mcp-test-error {
-  color: #d32f2f;
+  color: #DC2223;
   font-size: 14px;
+  font-weight: 400;
 }
 
 .mcp-test-error p {
@@ -4224,7 +4432,8 @@ export default {
 .mcp-response-details summary {
   cursor: pointer;
   font-weight: 600;
-  color: #4a90e2;
+  font-family: 'Inter', sans-serif;
+  color: #FB6E00;
   margin-bottom: 8px;
 }
 
@@ -4233,27 +4442,31 @@ export default {
 }
 
 .mcp-response-details pre {
-  background: #1a1a2e;
-  color: #f8f9fa;
+  background: #231F20;
+  color: #FFFFFF;
   padding: 16px;
-  border-radius: 8px;
+  border-radius: 6px;
   overflow-x: auto;
   font-size: 12px;
+  font-weight: 400;
   line-height: 1.5;
-  border: 1px solid #e9ecef;
+  border: 1px solid rgba(0, 0, 0, 0.1);
   margin-top: 8px;
+  font-family: 'Inter', monospace;
 }
 
 .schema-display {
   margin-top: 20px;
   padding-top: 20px;
-  border-top: 1px solid #e9ecef;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .schema-display h4 {
   margin: 0 0 16px 0;
-  color: #1a1a2e;
+  color: #231F20;
   font-size: 18px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 .schema-section {
@@ -4262,9 +4475,10 @@ export default {
 
 .schema-section h5 {
   margin: 0 0 12px 0;
-  color: #495057;
+  color: #231F20;
   font-size: 14px;
   font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 .schema-tags {
@@ -4276,28 +4490,29 @@ export default {
 .schema-tag {
   display: inline-block;
   padding: 6px 12px;
-  border-radius: 6px;
+  border-radius: 4px;
   font-size: 13px;
-  font-weight: 500;
+  font-weight: 400;
+  font-family: 'Inter', sans-serif;
   border: 1px solid;
 }
 
 .node-tag {
-  background: #e3f2fd;
-  color: #1976d2;
-  border-color: #90caf9;
+  background: #FFFFFF;
+  color: #FB6E00;
+  border-color: #FB6E00;
 }
 
 .rel-tag {
-  background: #f3e5f5;
-  color: #7b1fa2;
-  border-color: #ce93d8;
+  background: #FFFFFF;
+  color: #720096;
+  border-color: #720096;
 }
 
 .prop-tag {
-  background: #fff3e0;
-  color: #e65100;
-  border-color: #ffb74d;
+  background: #FFFFFF;
+  color: #FFC500;
+  border-color: #FFC500;
   font-size: 12px;
 }
 
@@ -4315,8 +4530,9 @@ export default {
 }
 
 .property-label {
-  color: #495057;
+  color: #231F20;
   font-size: 14px;
+  font-weight: 400;
   min-width: 120px;
 }
 
@@ -4325,26 +4541,26 @@ export default {
 }
 
 .countdown-timer {
-  background: linear-gradient(135deg, #e3f2fd 0%, #f0f4f8 100%);
-  border: 2px solid #4a90e2;
-  border-radius: 8px;
+  background: #F9F9F9;
+  border: 2px solid #FB6E00;
+  border-radius: 6px;
   padding: 16px;
   margin-bottom: 20px;
   animation: pulse 2s ease-in-out infinite;
 }
 
 .countdown-timer.countdown-finished {
-  background: linear-gradient(135deg, #fff3e0 0%, #fff8f0 100%);
-  border-color: #ff9800;
+  background: #F9F9F9;
+  border-color: #FB6E00;
   animation: none;
 }
 
 @keyframes pulse {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(74, 144, 226, 0.4);
+    box-shadow: 0 0 0 0 rgba(251, 110, 0, 0.4);
   }
   50% {
-    box-shadow: 0 0 0 8px rgba(74, 144, 226, 0);
+    box-shadow: 0 0 0 8px rgba(251, 110, 0, 0);
   }
 }
 
@@ -4357,19 +4573,21 @@ export default {
 
 .countdown-label {
   font-weight: 600;
-  color: #1a1a2e;
+  font-family: 'Inter', sans-serif;
+  color: #231F20;
   font-size: 14px;
 }
 
 .countdown-value {
   font-size: 24px;
   font-weight: 700;
-  color: #4a90e2;
+  font-family: 'Inter', sans-serif;
+  color: #FB6E00;
   font-variant-numeric: tabular-nums;
 }
 
 .countdown-value.countdown-warning {
-  color: #ff9800;
+  color: #DC2223;
   animation: blink 1s ease-in-out infinite;
 }
 
@@ -4385,9 +4603,9 @@ export default {
 .countdown-message {
   margin-top: 8px;
   padding-top: 8px;
-  border-top: 1px solid #ff9800;
-  color: #e65100;
-  font-weight: 500;
+  border-top: 1px solid #FB6E00;
+  color: #DC2223;
+  font-weight: 400;
   font-size: 14px;
   text-align: center;
 }
@@ -4395,13 +4613,15 @@ export default {
 .tools-section {
   margin-top: 30px;
   padding-top: 30px;
-  border-top: 2px solid #e9ecef;
+  border-top: 2px solid rgba(0, 0, 0, 0.08);
 }
 
 .tools-section h3 {
   margin-bottom: 20px;
-  color: #1a1a2e;
+  color: #231F20;
   font-size: 20px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 .tools-grid {
@@ -4412,9 +4632,9 @@ export default {
 }
 
 .tool-card {
-  background: linear-gradient(135deg, #f8f9fa 0%, #ffffff 100%);
-  border: 2px solid #e9ecef;
-  border-radius: 12px;
+  background: #FFFFFF;
+  border: 2px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
   padding: 20px;
   transition: all 0.3s ease;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
@@ -4423,7 +4643,7 @@ export default {
 .tool-card:hover {
   transform: translateY(-4px);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  border-color: #4a90e2;
+  border-color: #FB6E00;
 }
 
 .tool-header {
@@ -4432,15 +4652,16 @@ export default {
 
 .tool-name {
   margin: 0;
-  color: #1a1a2e;
+  color: #231F20;
   font-size: 18px;
   font-weight: 600;
-  font-family: 'Courier New', monospace;
+  font-family: 'Inter', sans-serif;
 }
 
 .tool-description {
-  color: #495057;
+  color: #646265;
   font-size: 14px;
+  font-weight: 400;
   line-height: 1.6;
   margin-bottom: 16px;
 }
@@ -4448,12 +4669,14 @@ export default {
 .tool-parameters {
   margin-top: 16px;
   padding-top: 16px;
-  border-top: 1px solid #e9ecef;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .tool-parameters strong {
-  color: #495057;
+  color: #231F20;
   font-size: 13px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   display: block;
@@ -4469,16 +4692,17 @@ export default {
 .tool-params-list li {
   padding: 6px 0;
   font-size: 13px;
-  color: #6c757d;
+  font-weight: 400;
+  color: #646265;
   line-height: 1.5;
 }
 
 .tool-params-list code {
-  background: #f8f9fa;
+  background: #F9F9F9;
   padding: 2px 6px;
   border-radius: 4px;
-  font-family: 'Courier New', monospace;
-  color: #4a90e2;
+  font-family: 'Inter', monospace;
+  color: #FB6E00;
   font-weight: 600;
   font-size: 12px;
 }
@@ -4486,52 +4710,56 @@ export default {
 .tools-empty {
   text-align: center;
   padding: 60px 20px;
-  color: #6c757d;
+  color: #646265;
   font-size: 16px;
+  font-weight: 400;
 }
 
 .call-tool-section {
   margin-top: 40px;
   padding-top: 30px;
-  border-top: 2px solid #e9ecef;
+  border-top: 2px solid rgba(0, 0, 0, 0.08);
 }
 
 .call-tool-section h3 {
   margin-bottom: 20px;
-  color: #1a1a2e;
+  color: #231F20;
   font-size: 20px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 .call-tool-form {
   display: flex;
   flex-direction: column;
   gap: 20px;
-  background: #f8f9fa;
+  background: #F9F9F9;
   padding: 24px;
-  border-radius: 12px;
-  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  border: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .select-input {
   width: 100%;
   padding: 12px;
-  background: #ffffff;
-  border: 2px solid #dee2e6;
-  border-radius: 8px;
+  background: #FFFFFF;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
   font-size: 14px;
-  font-family: inherit;
-  color: #212529;
+  font-family: 'Inter', sans-serif;
+  font-weight: 400;
+  color: #231F20;
   cursor: pointer;
   transition: border-color 0.3s;
 }
 
 .select-input:focus {
   outline: none;
-  border-color: #4a90e2;
+  border-color: #FB6E00;
 }
 
 .select-input:disabled {
-  background: #e9ecef;
+  background: #F9F9F9;
   cursor: not-allowed;
 }
 
@@ -4543,26 +4771,29 @@ export default {
 
 .tool-arguments h4 {
   margin: 0 0 12px 0;
-  color: #495057;
+  color: #231F20;
   font-size: 16px;
   font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 .param-type {
-  color: #6c757d;
+  color: #646265;
   font-size: 12px;
-  font-weight: normal;
-  font-family: 'Courier New', monospace;
+  font-weight: 400;
+  font-family: 'Inter', monospace;
 }
 
 .required {
-  color: #ef4444;
+  color: #DC2223;
   font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 .param-description {
   font-size: 12px;
-  color: #6c757d;
+  font-weight: 400;
+  color: #646265;
   margin-bottom: 4px;
   font-style: italic;
 }
@@ -4570,64 +4801,69 @@ export default {
 .input-field {
   width: 100%;
   padding: 10px;
-  background: #ffffff;
-  border: 2px solid #dee2e6;
-  border-radius: 8px;
+  background: #FFFFFF;
+  border: 2px solid rgba(0, 0, 0, 0.1);
+  border-radius: 6px;
   font-size: 14px;
-  font-family: inherit;
-  color: #212529;
+  font-family: 'Inter', sans-serif;
+  font-weight: 400;
+  color: #231F20;
   transition: border-color 0.3s;
 }
 
 .input-field:focus {
   outline: none;
-  border-color: #4a90e2;
+  border-color: #FB6E00;
 }
 
 .input-field:disabled {
-  background: #f8f9fa;
+  background: #F9F9F9;
   cursor: not-allowed;
 }
 
 .no-arguments {
   padding: 16px;
-  background: #e3f2fd;
-  border: 1px solid #90caf9;
-  border-radius: 8px;
-  color: #1976d2;
+  background: #F9F9F9;
+  border: 1px solid #FB6E00;
+  border-radius: 6px;
+  color: #FB6E00;
   font-size: 14px;
+  font-weight: 400;
   text-align: center;
 }
 
 .tool-result {
   margin-top: 24px;
   padding: 20px;
-  background: #f0f4f8;
-  border: 2px solid #4a90e2;
-  border-radius: 12px;
+  background: #FFFFFF;
+  border: 2px solid #FB6E00;
+  border-radius: 8px;
 }
 
 .tool-result h4 {
   margin: 0 0 16px 0;
-  color: #1a1a2e;
+  color: #231F20;
   font-size: 18px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 .result-info {
   margin-bottom: 16px;
   padding-bottom: 16px;
-  border-bottom: 1px solid #e9ecef;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
 }
 
 .result-info p {
   margin: 8px 0;
   font-size: 14px;
-  color: #495057;
+  font-weight: 400;
+  color: #231F20;
 }
 
 .result-content {
-  background: #1a1a2e;
-  border-radius: 8px;
+  background: #231F20;
+  border-radius: 6px;
   padding: 16px;
   overflow-x: auto;
   margin-bottom: 16px;
@@ -4635,10 +4871,11 @@ export default {
 
 .result-content pre {
   margin: 0;
-  color: #f8f9fa;
+  color: #FFFFFF;
   font-size: 13px;
+  font-weight: 400;
   line-height: 1.5;
-  font-family: 'Courier New', monospace;
+  font-family: 'Inter', monospace;
   white-space: pre-wrap;
   word-wrap: break-word;
 }
@@ -4647,7 +4884,7 @@ export default {
   display: flex;
   gap: 8px;
   margin-bottom: 24px;
-  border-bottom: 2px solid #e9ecef;
+  border-bottom: 2px solid rgba(0, 0, 0, 0.08);
 }
 
 .retrieval-tab-button {
@@ -4657,20 +4894,21 @@ export default {
   border-bottom: 3px solid transparent;
   font-size: 15px;
   font-weight: 600;
-  color: #6c757d;
+  font-family: 'Inter', sans-serif;
+  color: #646265;
   cursor: pointer;
   transition: all 0.3s;
   margin-bottom: -2px;
 }
 
 .retrieval-tab-button:hover {
-  color: #1a1a2e;
-  background: #f8f9fa;
+  color: #231F20;
+  background: #F9F9F9;
 }
 
 .retrieval-tab-button.active {
-  color: #4a90e2;
-  border-bottom-color: #4a90e2;
+  color: #FB6E00;
+  border-bottom-color: #FB6E00;
 }
 
 .retrieval-method-content {
@@ -4680,61 +4918,66 @@ export default {
 }
 
 .method-description {
-  background: linear-gradient(135deg, #f0f4f8 0%, #ffffff 100%);
-  border: 2px solid #e3f2fd;
-  border-radius: 12px;
+  background: #FFFFFF;
+  border: 2px solid rgba(0, 0, 0, 0.08);
+  border-radius: 8px;
   padding: 24px;
   margin-bottom: 20px;
 }
 
 .method-description h3 {
   margin: 0 0 16px 0;
-  color: #1a1a2e;
+  color: #231F20;
   font-size: 20px;
+  font-weight: 600;
+  font-family: 'Inter', sans-serif;
 }
 
 .method-description p {
-  color: #495057;
+  color: #646265;
   font-size: 14px;
+  font-weight: 400;
   line-height: 1.7;
   margin-bottom: 12px;
 }
 
 .method-summary {
-  color: #495057;
+  color: #646265;
   font-size: 15px;
+  font-weight: 400;
   line-height: 1.7;
   margin-bottom: 20px;
-  font-weight: 500;
 }
 
 .query-display {
   margin-top: 20px;
   padding-top: 20px;
-  border-top: 1px solid #e9ecef;
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
 }
 
 .query-display strong {
   display: block;
-  color: #1a1a2e;
+  color: #231F20;
   font-size: 14px;
   font-weight: 600;
+  font-family: 'Inter', sans-serif;
   margin-bottom: 12px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
 .query-code {
-  background: #1a1a2e;
-  color: #f8f9fa;
+  background: #231F20;
+  color: #FFFFFF;
   padding: 16px;
-  border-radius: 8px;
+  border-radius: 6px;
   overflow-x: auto;
   font-size: 13px;
+  font-weight: 400;
   line-height: 1.6;
-  font-family: 'Courier New', monospace;
+  font-family: 'Inter', monospace;
   margin: 0;
-  border: 1px solid #e9ecef;
+  border: 1px solid rgba(0, 0, 0, 0.1);
   white-space: pre;
 }
 </style>

@@ -19,8 +19,11 @@ sys.path.insert(0, os.path.join(AI_TOOLKIT_DIR, "memgraph-toolbox", "src"))
 load_dotenv()
 
 # Configure logging
+# Default to DEBUG level to see detailed execution logs including custom tool calls
+# Can be overridden with LOG_LEVEL environment variable
+log_level = os.getenv("LOG_LEVEL", "DEBUG").upper()
 logging.basicConfig(
-    level=logging.WARNING,
+    level=getattr(logging, log_level, logging.DEBUG),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)

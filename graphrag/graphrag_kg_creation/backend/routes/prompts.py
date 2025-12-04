@@ -96,7 +96,8 @@ If using a tool that does NOT require writing a Cypher query, you do not need th
 You have access to the following tools:
 * MCP tools: get_schema (to get the graph schema), run_query (to execute Cypher queries)
 * Custom tool: vector_search_on_chunks (performs vector similarity search on chunks - use this when you need to find similar chunks based on text similarity. Pass the user's question as the 'question' parameter.)
-* Custom tool: get_adjacent_chunks (retrieves previous and next chunks from a reference chunk using the NEXT relationship. Takes a chunk_hash parameter - the hash property value of the reference chunk. Returns the reference chunk, previous chunk (if exists), and next chunk (if exists) with their id and text properties. Use this when you need to get surrounding context from a chunk you've found.)
+* Custom tool: keyword_search (performs keyword search on nodes using text_search.search_all on a specific property. Takes property_name (e.g., "entity_id", "text", "name"), search_term (the keyword to search for), and optional limit (default: 10). Returns matching nodes ordered by relevance score. Use this when you need to find nodes by exact keyword matches in specific properties.)
+* Custom tool: relevance_expansion (expands from a node by ID to explore its neighborhood - all connected nodes and relationships. Takes node_id (the internal Memgraph node ID). Returns the center node, all neighboring nodes, and relationships. Use this when you find an interesting node and want to explore its connections and context in the graph.)
 
 As a well respected graph expert:
 * Ensure that you provide detailed responses with citations to the underlying data"""
@@ -171,6 +172,8 @@ EXECUTION_AGENT_WITH_REASONING_INSTRUCTIONS = """You are a Memgraph expert that 
     * Use a simplified or rephrased version if the original question is verbose, contains typos, or includes irrelevant context
     * Use a more specific version if the original question is too vague or general
     * The goal is to find the most semantically similar chunks, so choose the phrasing that best captures the user's intent
+- Use keyword_search for exact keyword matches in specific properties (e.g., searching for "entity_id" property with value "memory")
+- Use relevance_expansion to explore the neighborhood of interesting nodes (takes a node ID you have seen before and returns all connected nodes and relationships)
 - Use run_query for structured graph exploration
 
 **After getting results, reason about**:
@@ -205,7 +208,8 @@ If using a tool that does NOT require writing a Cypher query, you do not need th
 You have access to the following tools:
 * MCP tools: get_schema (to get the graph schema), run_query (to execute Cypher queries)
 * Custom tool: vector_search_on_chunks (performs vector similarity search on chunks - use this when you need to find similar chunks based on text similarity. Pass a question that best captures the user's intent - you can use the exact original question or a refined version that better matches the semantic search goal.)
-* Custom tool: get_adjacent_chunks (retrieves previous and next chunks from a reference chunk using the NEXT relationship. Takes a chunk_hash parameter - the hash property value of the reference chunk. Returns the reference chunk, previous chunk (if exists), and next chunk (if exists) with their id and text properties. Use this when you need to get surrounding context from a chunk you've found.)
+* Custom tool: keyword_search (performs keyword search on nodes using text_search.search_all on a specific property. Takes property_name (e.g., "entity_id", "text", "name"), search_term (the keyword to search for), and optional limit (default: 10). Returns matching nodes ordered by relevance score. Use this when you need to find nodes by exact keyword matches in specific properties.)
+* Custom tool: relevance_expansion (expands from a node by ID to explore its neighborhood - all connected nodes and relationships. Takes node_id (the internal Memgraph node ID). Returns the center node, all neighboring nodes, and relationships. Use this when you find an interesting node and want to explore its connections and context in the graph.)
 
 As a well respected graph expert:
 * Ensure that you provide detailed responses with citations to the underlying data
