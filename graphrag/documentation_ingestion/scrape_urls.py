@@ -5,9 +5,9 @@ Stores URLs as JSON objects with metadata: valid, keywords, summary, content_lin
 import os
 import json
 import logging
-from typing import List, Dict, Any, Set, Optional
-from collections import deque
+from typing import List, Dict, Any, Optional, Set
 from urllib.parse import urljoin, urlparse
+from collections import deque
 
 import httpx
 from bs4 import BeautifulSoup
@@ -19,6 +19,9 @@ from prompts import (
     SUMMARY_SYSTEM_PROMPT,
     SUMMARY_USER_PROMPT_TEMPLATE,
 )
+from scrape_cypher import extract_cypher_queries_from_content
+from database import store_cypher_queries, update_url_metadata
+from models import DocumentationUrl
 
 logger = logging.getLogger(__name__)
 
@@ -164,55 +167,60 @@ async def extract_content_links(soup: BeautifulSoup, base_url: str, inner_main: 
     return await extract_links_from_element(inner_main, base_url, exclude_base=True)
 
 
-async def process_url(url: str, client: httpx.AsyncClient, depth_map: Dict[str, int]) -> Dict[str, Any]:
-    normalized_url = normalize_url(url)
-    url_obj = {
-        "url": normalized_url,
-        "valid": None,
-        "keywords": [],
-        "summary": "",
-        "content_links": [],
-        "depth": depth_map.get(normalized_url, -1)  # -1 means not in sidebar hierarchy
-    }
+async def process_url_content(memgraph, urls: List[str]) -> int:
+    """
+    Process URL content to extract and ingest Cypher queries, description, and keywords.
     
-    try:
-        response = await client.get(normalized_url, follow_redirects=True)
-        response.raise_for_status()
-        url_obj["valid"] = True
-        
-        if 'text/html' not in response.headers.get('content-type', '').lower():
-            return url_obj
-        
-        soup = BeautifulSoup(response.text, 'html.parser')
-        inner_main = get_cleaned_inner_main(soup, require_nested=False)
-        
-        if soup.find('main') and soup.find('main').find('main'):
-            url_obj["content_links"] = await extract_content_links(soup, normalized_url, inner_main)
-        
-        text_content = inner_main.get_text(separator=' ', strip=True)
-        if text_content:
-            url_obj["keywords"] = await extract_keywords_with_llm(text_content, normalized_url)
-            url_obj["summary"] = await summarize_with_llm(text_content, normalized_url)
-    except Exception as e:
-        url_obj["valid"] = False
-        logger.warning(f"Error processing {normalized_url}: {str(e)}")
+    Returns:
+        Total number of Cypher queries extracted and stored
+    """
+    logger.info(f"Processing content from {len(urls)} URLs")
+    cypher_queries_count = 0
     
-    return url_obj
+    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+        for idx, url in enumerate(urls, 1):
+            try:
+                logger.info(f"[{idx}/{len(urls)}] Processing: {url}")
+                response = await client.get(url)
+                response.raise_for_status()
+                
+                if 'text/html' not in response.headers.get('content-type', '').lower():
+                    continue
+                
+                soup = BeautifulSoup(response.text, 'html.parser')
+                text_content = extract_text_content(soup)
+                
+                if text_content:
+                    queries = await extract_cypher_queries_from_content(text_content, url, soup)
+                    if queries:
+                        await store_cypher_queries(memgraph, queries, url)
+                        cypher_queries_count += len(queries)
+                    
+                    keywords = await extract_keywords_with_llm(text_content, url)
+                    summary = await summarize_with_llm(text_content, url)
+                    update_url_metadata(memgraph, url, summary, keywords, len(text_content))
+                    
+            except Exception as e:
+                logger.error(f"Error processing {url}: {str(e)}")
+                continue
+    
+    logger.info(f"Processed {len(urls)} URLs")
+    return cypher_queries_count
 
 
-async def discover_documentation_urls() -> List[Dict[str, Any]]:
-    cached_urls = load_cached_urls()
-    if cached_urls:
-        logger.info(f"Using {len(cached_urls)} cached URLs")
-        return cached_urls
+async def discover_urls(base_url: str = MEMGRAPH_DOCS_BASE_URL) -> List[DocumentationUrl]:
+    """
+    Discover URLs by crawling from the base URL and following content links.
     
-    logger.info("Starting fresh URL discovery...")
-    logger.info("=" * 80)
-    logger.info("Step 1: Discovering content links")
-    logger.info("=" * 80)
+    Returns:
+        List of DocumentationUrl objects with url and content_urls
+    """
+    logger.info(f"Discovering URLs from {base_url}")
     
     discovered: Set[str] = set()
-    queue = deque([MEMGRAPH_DOCS_BASE_URL])
+    url_to_content_links: Dict[str, List[str]] = {}
+    queue = deque([base_url])
+    
     async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
         while queue:
             current_url = queue.popleft()
@@ -231,6 +239,7 @@ async def discover_documentation_urls() -> List[Dict[str, Any]]:
                 
                 soup = BeautifulSoup(response.text, 'html.parser')
                 content_links = await extract_content_links(soup, current_url)
+                url_to_content_links[normalized] = content_links
                 
                 for link_url in content_links:
                     normalized_link = normalize_url(link_url)
@@ -241,18 +250,10 @@ async def discover_documentation_urls() -> List[Dict[str, Any]]:
                 logger.warning(f"Error scraping {current_url}: {str(e)}")
                 continue
     
-    logger.info("=" * 80)
-    logger.info(f"Step 2: Processing {len(discovered)} URLs to extract metadata")
-    logger.info("=" * 80)
+    result = [
+        DocumentationUrl(url=url, content_urls=url_to_content_links.get(url, []))
+        for url in sorted(discovered)
+    ]
     
-    url_objects = []
-    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-        for idx, url in enumerate(sorted(discovered), 1):
-            logger.info(f"[{idx}/{len(discovered)}] Processing: {url}")
-            url_objects.append(await process_url(url, client, {}))
-    
-    logger.info(f"Discovered {len(url_objects)} total documentation URLs")
-    if url_objects:
-        save_urls_to_cache(url_objects)
-    
-    return url_objects
+    logger.info(f"Discovered {len(result)} URLs from {base_url}")
+    return result

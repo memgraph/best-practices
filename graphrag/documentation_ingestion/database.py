@@ -118,15 +118,16 @@ async def store_cypher_queries(memgraph: Memgraph, queries: List[CypherQuery], s
             logger.warning(f"Error storing query for entity {query.entity_id}: {str(e)}")
 
 
-def update_url_metadata(memgraph: Memgraph, url: str, description: str, keywords: List[str]):
+def update_url_metadata(memgraph: Memgraph, url: str, description: str, keywords: List[str], content_length: int = 0):
     """
-    Update URL node with description and keywords.
+    Update URL node with description, keywords, and content length.
     
     Args:
         memgraph: Memgraph database connection
         url: The URL to update
         description: Description/summary text
         keywords: List of keywords
+        content_length: Length of the text content in characters
     """
     try:
         url_escaped = escape_cypher_string(url)
@@ -136,7 +137,7 @@ def update_url_metadata(memgraph: Memgraph, url: str, description: str, keywords
         
         memgraph.query(f"""
             MATCH (u:Url {{name: '{url_escaped}'}})
-            SET u += {{description: '{description_escaped}', keywords: '{keywords_escaped}'}}
+            SET u += {{description: '{description_escaped}', keywords: '{keywords_escaped}', content_length: {content_length}}}
         """)
     except Exception as e:
         logger.warning(f"Error updating URL metadata for {url}: {str(e)}")
