@@ -35,7 +35,7 @@ _memgraph = None
 _main_memgraph = None
 
 
-async def initialize_resources(cleanup: bool = False, create_vector_index: bool = False):
+async def initialize_resources(cleanup: bool = False, create_vector_index: bool = False, create_text_index: bool = True):
     """Initialize Memgraph and LightRAG wrapper."""
     global _lightrag_wrapper, _memgraph
     
@@ -71,6 +71,35 @@ async def initialize_resources(cleanup: bool = False, create_vector_index: bool 
             create_vector_search_index(_memgraph, "Chunk", "embedding")
         except Exception as e:
             logger.warning(f"Error creating vector index (may already exist): {str(e)}")
+    
+    if create_text_index:
+        try:
+            # Create text index for base entity_id
+            _memgraph.query("CREATE TEXT INDEX entity_id ON :base(entity_id);")
+            logger.info("Created text index on base(entity_id)")
+        except Exception as e:
+            logger.warning(f"Error creating text index on base(entity_id) (may already exist): {str(e)}")
+        
+        try:
+            # Create text index for Chunk text
+            _memgraph.query("CREATE TEXT INDEX text ON :Chunk(text);")
+            logger.info("Created text index on Chunk(text)")
+        except Exception as e:
+            logger.warning(f"Error creating text index on Chunk(text) (may already exist): {str(e)}")
+        
+        try:
+            # Create text index for CypherQuery query
+            _memgraph.query("CREATE TEXT INDEX query ON :CypherQuery(query);")
+            logger.info("Created text index on CypherQuery(query)")
+        except Exception as e:
+            logger.warning(f"Error creating text index on CypherQuery(query) (may already exist): {str(e)}")
+
+        try:
+            # Create text index for Url description
+            _memgraph.query("CREATE TEXT INDEX url_description ON :Url(description, keywords);")
+            logger.info("Created text index on Url(description, keywords)")
+        except Exception as e:
+            logger.warning(f"Error creating text index on Url(description, keywords) (may already exist): {str(e)}")
     
     # Setup LightRAG directory
     lightrag_log_file = os.path.join(LIGHTRAG_DIR, "lightrag.log")

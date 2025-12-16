@@ -46,40 +46,11 @@
             {{ ingestMessage }}
           </div>
 
-          <div class="ingestion-controls">
-            <div class="ingestion-options">
-              <label class="checkbox-label">
-                <input type="checkbox" v-model="ingestFromScratch" />
-                <span>Cleanup existing data</span>
-              </label>
-              <label class="checkbox-label">
-                <input type="checkbox" v-model="forceRefreshUrls" />
-                <span>Force refresh URLs (ignore cache)</span>
-              </label>
-            </div>
-            <div class="ingestion-buttons">
-              <button 
-                @click="scrapeAllDocs" 
-                :disabled="ingesting || discovering" 
-                class="btn btn-primary"
-              >
-                {{ ingesting ? 'Ingesting...' : discovering ? 'Discovering URLs...' : 'Scrape & Ingest All Documentation' }}
-              </button>
-              
-              <button 
-                @click="discoverUrls" 
-                :disabled="ingesting || discovering" 
-                class="btn btn-secondary"
-              >
-                {{ discovering ? 'Discovering...' : 'Discover URLs Only' }}
-              </button>
-            </div>
-          </div>
 
           <!-- Custom URLs Ingestion -->
           <div class="card custom-urls-card">
-            <h3>Ingest Custom URLs</h3>
-            <p class="description">Paste URLs (one per line) to ingest specific documents</p>
+            <h3>Ingest URLs</h3>
+            <p class="description">Paste URLs (one per line) to ingest specific documents. Leave empty to ingest all documentation.</p>
             <div class="form-group">
               <textarea
                 v-model="customUrls"
@@ -91,6 +62,10 @@
             </div>
             
             <div class="batch-options">
+              <label class="checkbox-label">
+                <input type="checkbox" v-model="scrapeCypherQueries" />
+                <span>Scrape Cypher queries</span>
+              </label>
               <label class="checkbox-label">
                 <input type="checkbox" v-model="batchOnlyChunks" />
                 <span>Only create chunks (skip LightRAG processing)</span>
@@ -104,6 +79,10 @@
                 <span>Create vector index</span>
               </label>
               <label class="checkbox-label">
+                <input type="checkbox" v-model="batchCreateTextIndex" />
+                <span>Create text index</span>
+              </label>
+              <label class="checkbox-label">
                 <input type="checkbox" v-model="batchCleanup" />
                 <span>Cleanup existing data</span>
               </label>
@@ -111,10 +90,10 @@
             
             <button 
               @click="ingestCustomUrls" 
-              :disabled="ingesting || discovering || !customUrls.trim()" 
+              :disabled="ingesting" 
               class="btn btn-primary"
             >
-              {{ ingesting ? 'Ingesting...' : 'Ingest Custom URLs' }}
+              {{ ingesting ? 'Ingesting...' : (customUrls.trim() ? 'Ingest URLs' : 'Ingest All Documentation') }}
             </button>
           </div>
 
@@ -271,11 +250,12 @@
                     <strong v-if="msg.type === 'user'">You</strong>
                     <span class="message-time">{{ msg.time }}</span>
                   </div>
-                  <div v-if="msg.type === 'temp'" class="temp-message">
-                    <div class="temp-message-icon">⚙️</div>
+                  <div v-if="msg.type === 'temp'" :class="['temp-message', { 'log-message': msg.is_log_message }]">
+                    <div class="temp-message-icon">{{ msg.is_log_message ? '📝' : '⚙️' }}</div>
                     <div class="temp-message-content">
-                      <strong>Tool Call</strong><span v-if="msg.interceptor_name" class="interceptor-name"> ({{ msg.interceptor_name }})</span>: {{ msg.text }}
-                      <pre v-if="msg.query" class="query-preview">{{ msg.query }}</pre>
+                      <strong v-if="!msg.is_log_message">Tool Call</strong><strong v-else>Log Message</strong><span v-if="msg.interceptor_name" class="interceptor-name"> ({{ msg.interceptor_name }})</span><span v-if="!msg.is_log_message">: {{ msg.text }}</span>
+                      <div v-if="msg.is_log_message" class="log-message-text">{{ msg.text }}</div>
+                      <pre v-if="msg.query && !msg.is_log_message" class="query-preview">{{ msg.query }}</pre>
                     </div>
                   </div>
                   <div v-else-if="msg.type === 'approval'" class="approval-message">
@@ -502,19 +482,18 @@ export default {
     return {
       activeTab: 'ingest',
       ingesting: false,
-      discovering: false,
       ingestMessage: '',
       ingestMessageType: '',
       ingestResult: null,
       discoveredUrls: [],
       progress: [],
       countdownTimer: 0,
-      ingestFromScratch: true,
-      forceRefreshUrls: false,
       customUrls: '',
+      scrapeCypherQueries: true,
       batchOnlyChunks: false,
       batchLinkChunks: true,
       batchCreateVectorIndex: true,
+      batchCreateTextIndex: true,
       batchCleanup: true,
       countdownSeconds: 0,
       countdownInterval: null,
@@ -566,185 +545,6 @@ export default {
     })
   },
   methods: {
-    async discoverUrls() {
-      this.discovering = true
-      this.discoveredUrls = []
-      this.ingestMessage = 'Discovering URLs...'
-      this.ingestMessageType = ''
-      
-      try {
-        const response = await fetch('/api/ingest/discover-stream', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            force_refresh: this.forceRefreshUrls
-          })
-        })
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`)
-        }
-
-        // Process SSE stream
-        const reader = response.body.getReader()
-        const decoder = new TextDecoder()
-        let buffer = ''
-
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-
-          buffer += decoder.decode(value, { stream: true })
-          const lines = buffer.split('\n')
-          buffer = lines.pop() || ''
-
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(line.slice(6))
-                
-                if (data.type === 'url') {
-                  this.discoveredUrls.push(data.url)
-                  this.ingestMessage = `Discovered ${data.count} URLs...`
-                  // Scroll to show new URLs
-                  this.$nextTick(() => {
-                    const urlsCard = document.querySelector('.discovered-urls-card')
-                    if (urlsCard) {
-                      urlsCard.scrollTop = urlsCard.scrollHeight
-                    }
-                  })
-                } else if (data.type === 'complete') {
-                  this.ingestMessage = `Successfully discovered ${data.total_count} documentation URLs`
-                  this.ingestMessageType = 'success'
-                } else if (data.type === 'error') {
-                  throw new Error(data.error || 'Unknown error occurred')
-                }
-              } catch (e) {
-                console.error('Error parsing SSE data:', e)
-              }
-            }
-          }
-        }
-      } catch (error) {
-        this.ingestMessage = error.message || 'Error discovering URLs'
-        this.ingestMessageType = 'error'
-      } finally {
-        this.discovering = false
-      }
-    },
-    async scrapeAllDocs() {
-      this.ingesting = true
-      this.ingestMessage = ''
-      this.ingestResult = null
-      this.progress = []
-      this.ingestionFinished = false
-      
-      // Clear any existing countdown timer
-      if (this.countdownInterval) {
-        clearInterval(this.countdownInterval)
-        this.countdownInterval = null
-      }
-      
-      try {
-        // First discover URLs if not already discovered or force refresh is enabled
-        if (this.discoveredUrls.length === 0 || this.forceRefreshUrls) {
-          this.ingestMessage = 'Discovering documentation URLs...'
-          const discoverResponse = await axios.post('/api/ingest/discover', {
-            force_refresh: this.forceRefreshUrls
-          })
-          this.discoveredUrls = discoverResponse.data.urls || []
-        }
-        
-        if (this.discoveredUrls.length === 0) {
-          throw new Error('No URLs discovered')
-        }
-        
-        // Estimate ingestion time
-        try {
-          const estimateResponse = await axios.post('/api/ingest/estimate', {
-            urls: this.discoveredUrls
-          })
-          const estimate = estimateResponse.data
-          
-          if (estimate.total_estimated_time_seconds) {
-            this.countdownSeconds = Math.ceil(estimate.total_estimated_time_seconds)
-            this.countdownTimer = this.countdownSeconds
-            this.startCountdown()
-          }
-        } catch (e) {
-          console.warn('Could not estimate ingestion time:', e)
-        }
-        
-        // Process documents one by one for progress tracking
-        let firstDocument = true
-        for (let idx = 0; idx < this.discoveredUrls.length; idx++) {
-          const url = this.discoveredUrls[idx]
-          
-          // Add progress item
-          this.progress.push({
-            url: url,
-            status: 'processing',
-            progress: 0
-          })
-          
-          this.$nextTick(() => {
-            this.scrollToProgress()
-          })
-          
-          try {
-            await axios.post('/api/ingest/single', {
-              url: url,
-              only_chunks: false,
-              link_chunks: true,
-              create_vector_index: firstDocument,
-              cleanup: firstDocument && this.ingestFromScratch
-            })
-            
-            // Update progress using index for proper Vue reactivity
-            const progressIndex = this.progress.findIndex(p => p.url === url)
-            if (progressIndex !== -1) {
-              // Vue 3: direct assignment works with reactivity
-              this.progress[progressIndex].status = 'completed'
-              this.progress[progressIndex].progress = 100
-            }
-            
-            firstDocument = false
-          } catch (error) {
-            // Update progress using index for proper Vue reactivity
-            const progressIndex = this.progress.findIndex(p => p.url === url)
-            if (progressIndex !== -1) {
-              // Vue 3: direct assignment works with reactivity
-              this.progress[progressIndex].status = 'error'
-              this.progress[progressIndex].error = error.response?.data?.detail || error.message
-            }
-          }
-        }
-        
-        this.ingestionFinished = true
-        if (this.countdownInterval) {
-          clearInterval(this.countdownInterval)
-          this.countdownInterval = null
-        }
-        
-        this.ingestResult = {
-          urls_processed: this.discoveredUrls.length,
-          urls: this.discoveredUrls.slice(0, 10)
-        }
-        this.ingestMessage = 'Successfully scraped and ingested all documentation!'
-        this.ingestMessageType = 'success'
-      } catch (error) {
-        this.ingestMessage = error.response?.data?.detail || error.message || 'Error scraping documentation'
-        this.ingestMessageType = 'error'
-        if (this.countdownInterval) {
-          clearInterval(this.countdownInterval)
-          this.countdownInterval = null
-        }
-      } finally {
-        this.ingesting = false
-      }
-    },
     async ingestCustomUrls() {
       this.ingesting = true
       this.ingestMessage = ''
@@ -765,34 +565,11 @@ export default {
           .map(url => url.trim())
           .filter(url => url.length > 0)
         
+        // If no URLs provided, backend will automatically discover all documentation
         if (urlList.length === 0) {
-          this.ingestMessage = 'Please provide at least one URL'
-          this.ingestMessageType = 'error'
-          this.ingesting = false
-          return
-        }
-        
-        // Estimate ingestion time first
-        let estimate = null
-        try {
-          const estimateResponse = await axios.post('/api/ingest/estimate', {
-            urls: urlList
-          })
-          estimate = estimateResponse.data
-          
-          // Show estimation info
-          if (estimate.total_chunks) {
-            this.ingestMessage = `Estimated: ${estimate.total_chunks} chunks • ${this.formatTime(estimate.total_estimated_time_seconds)}`
-            this.ingestMessageType = ''
-          }
-          
-          if (estimate.total_estimated_time_seconds) {
-            this.countdownSeconds = Math.ceil(estimate.total_estimated_time_seconds)
-            this.countdownTimer = this.countdownSeconds
-            this.startCountdown()
-          }
-        } catch (e) {
-          console.warn('Could not estimate ingestion time:', e)
+          this.ingestMessage = 'No URLs provided, discovering all documentation...'
+          this.ingestMessageType = ''
+        } else {
           this.ingestMessage = `Processing ${urlList.length} URL(s)...`
           this.ingestMessageType = ''
         }
@@ -800,9 +577,11 @@ export default {
         // Call batch endpoint - it will process all URLs and return when done
         const response = await axios.post('/api/ingest/batch', {
           urls: urlList,
+          scrape_cypher_queries: this.scrapeCypherQueries,
           only_chunks: this.batchOnlyChunks,
           link_chunks: this.batchLinkChunks,
           create_vector_index: this.batchCreateVectorIndex,
+          create_text_index: this.batchCreateTextIndex,
           cleanup: this.batchCleanup
         })
         
@@ -923,6 +702,34 @@ export default {
                   finalResult = data.data
                 } else if (data.type === 'error') {
                   throw new Error(data.error || 'Unknown error occurred')
+                } else if (data.type === 'mcp_tool_call') {
+                  // Display MCP tool call message in chat
+                  let query = ''
+                  let displayText = `Executing ${data.tool_name}`
+                  
+                  // Handle log_message specially - show the message content
+                  let isLogMessage = false
+                  if (data.tool_name === 'log_message') {
+                    const message = data.data?.arguments?.message || ''
+                    displayText = message
+                    query = '' // No query for log messages
+                    isLogMessage = true
+                    console.log('📝 Log message received:', message)
+                  } else {
+                    // For other tools (like run_query), extract query
+                    query = data.data?.arguments?.query || ''
+                  }
+                  
+                  const toolCallMessage = {
+                    type: 'temp',
+                    text: displayText,
+                    interceptor_name: data.interceptor_name,
+                    query: query,
+                    is_log_message: isLogMessage,
+                    time: new Date().toLocaleTimeString()
+                  }
+                  this.messages.push(toolCallMessage)
+                  this.scrollToBottom()
                 }
               } catch (e) {
                 console.error('Error parsing SSE data:', e)
@@ -1204,10 +1011,55 @@ export default {
   font-size: 12px;
   margin-top: 8px;
   overflow-x: auto;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-width: 100%;
 }
 
 .temp-message {
   font-size: 14px;
+}
+
+.temp-message.log-message {
+  background: linear-gradient(135deg, #e3f2fd 0%, #f3e5f5 100%);
+  border-left: 4px solid #2196f3;
+  padding: 12px;
+  border-radius: 8px;
+  margin: 8px 0;
+}
+
+.temp-message.log-message .temp-message-icon {
+  color: #2196f3;
+  font-size: 20px;
+}
+
+.temp-message.log-message .temp-message-content {
+  color: #1565c0;
+}
+
+.temp-message.log-message .log-message-text {
+  margin-top: 8px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 6px;
+  color: #424242;
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.temp-message.log-message .log-message-content {
+  margin-top: 8px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.7);
+  border-radius: 6px;
+  color: #424242;
+  font-size: 13px;
+  font-family: 'Courier New', monospace;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  max-width: 100%;
 }
 
 .message-time {

@@ -42,6 +42,8 @@ from .custom_tools import (
     create_vector_search_tool,
     create_keyword_search_tool,
     create_relevance_expansion_tool,
+    create_log_message_tool,
+    create_query_search_tool,
 )
 from .mcp_interceptor import create_interceptor
 
@@ -80,13 +82,15 @@ def create_documentation_agent(model: str, server) -> Agent:
     vector_search_tool = create_vector_search_tool(mcp_server=server)
     keyword_search_tool = create_keyword_search_tool(mcp_server=server)
     relevance_expansion_tool = create_relevance_expansion_tool(mcp_server=server)
+    query_search_tool = create_query_search_tool(mcp_server=server)
+    log_message_tool = create_log_message_tool(mcp_server=server)
     
     return Agent(
         name="Documentation Agent",
         instructions=get_documentation_agent_instructions(),
         model=model,
         mcp_servers=[server],
-        tools=[vector_search_tool, keyword_search_tool, relevance_expansion_tool],
+        tools=[vector_search_tool, keyword_search_tool, relevance_expansion_tool, query_search_tool, log_message_tool],
         model_settings=ModelSettings(
             tool_choice="required",
             temperature=0.1,
@@ -105,8 +109,8 @@ def create_main_graph_agent(model: str, main_server, docs_server=None, mode: str
         docs_server: Optional MCP server for documentation (allows agent to query docs for help)
         mode: "agent" or "ask" - determines behavior for write operations
     """
-    tools = []
     mcp_servers = [main_server]
+    tools = [create_log_message_tool(mcp_server=main_server)]
     
     # If documentation server is provided, add documentation tools
     # Note: We don't add docs_server to mcp_servers to avoid duplicate tool names (run_query, get_schema)
@@ -116,6 +120,7 @@ def create_main_graph_agent(model: str, main_server, docs_server=None, mode: str
             create_vector_search_tool(mcp_server=docs_server),
             create_keyword_search_tool(mcp_server=docs_server),
             create_relevance_expansion_tool(mcp_server=docs_server),
+            create_query_search_tool(mcp_server=docs_server),
         ])
         # Don't add docs_server to mcp_servers - it would cause duplicate tool names
     
@@ -157,6 +162,56 @@ def create_manager_agent(docs_agent: Agent, main_graph_agent: Agent, model: str,
     )
 
 
+
+
+def create_message_callback(message_queue: asyncio.Queue):
+    """
+    Create a message callback function that puts messages into the queue.
+    
+    Args:
+        message_queue: The asyncio queue to put messages into
+    
+    Returns:
+        Async callback function(tool_name, interceptor_name, data)
+    """
+    async def message_callback(tool_name: str, interceptor_name: str, data: Dict[str, Any]):
+        """Callback to send MCP tool call messages to the frontend."""
+        await message_queue.put({
+            "type": "mcp_tool_call",
+            "tool_name": tool_name,
+            "interceptor_name": interceptor_name,
+            "data": data
+        })
+    
+    return message_callback
+
+
+async def run_agent_task(
+    manager_agent: Agent,
+    question: str,
+    session: Session,
+    message_queue: asyncio.Queue
+) -> Any:
+    """
+    Run the agent as a background task and signal completion via the message queue.
+    
+    Args:
+        manager_agent: The manager agent to run
+        question: The user's question
+        session: The session to use
+        message_queue: Queue to signal completion (puts None when done)
+    
+    Returns:
+        The result from Runner.run()
+    """
+    result = await Runner.run(
+        manager_agent,
+        question,
+        session=session
+    )
+    # Signal completion by putting None in the queue
+    await message_queue.put(None)
+    return result
 
 
 def create_mcp_server_context(
@@ -208,6 +263,13 @@ async def chat_stream(request: ChatRequest):
 
     async def event_generator():
         """Generator function for SSE events."""
+        message_queue = asyncio.Queue()
+        agent_task = None
+        result = None
+        
+        # Create message callback for interceptors
+        message_callback = create_message_callback(message_queue)
+        
         try:
             session = get_or_create_session(request.session_id)
             
@@ -219,7 +281,8 @@ async def chat_stream(request: ChatRequest):
             ) as docs_base_server:
                 docs_interceptor = create_interceptor(
                     base_server=docs_base_server,
-                    name="Documentation Graph"
+                    name="Documentation Graph",
+                    message_callback=message_callback
                 )
                 
                 logger.info(
@@ -236,7 +299,8 @@ async def chat_stream(request: ChatRequest):
                 ) as main_base_server:
                     main_interceptor = create_interceptor(
                         base_server=main_base_server,
-                        name="Main Graph"
+                        name="Main Graph",
+                        message_callback=message_callback
                     )
                     
                     logger.info(
@@ -259,11 +323,54 @@ async def chat_stream(request: ChatRequest):
 
                     logger.info(f"Running chat assistant with session {session.session_id}...")
                     
-                    result = await Runner.run(
-                        manager_agent, 
-                        request.question,
-                        session=session
+                    # Start agent execution as a background task
+                    agent_task = asyncio.create_task(
+                        run_agent_task(
+                            manager_agent,
+                            request.question,
+                            session,
+                            message_queue
+                        )
                     )
+                    
+                    # Process messages from queue while agent is running
+                    while True:
+                        # Check if agent is done first
+                        if agent_task.done():
+                            # Drain any remaining messages from queue
+                            while not message_queue.empty():
+                                try:
+                                    message = message_queue.get_nowait()
+                                    if message is not None:
+                                        yield f"data: {json.dumps(message)}\n\n"
+                                except Exception:
+                                    # Queue might have been modified, break to avoid infinite loop
+                                    break
+                            break
+                        
+                        try:
+                            # Wait for either a message or check if agent is done
+                            message = await asyncio.wait_for(message_queue.get(), timeout=0.1)
+                            
+                            if message is None:
+                                # Agent completed
+                                break
+                            
+                            # Yield the message as SSE event
+                            yield f"data: {json.dumps(message)}\n\n"
+                        except asyncio.TimeoutError:
+                            # Continue loop to check agent status
+                            continue
+                    
+                    # Wait for agent task to complete if not already done
+                    if not agent_task.done():
+                        result = await agent_task
+                    elif agent_task.exception():
+                        # Re-raise any exception from the agent task
+                        raise agent_task.exception()
+                    else:
+                        # Get result from completed task
+                        result = agent_task.result()
                     
                     logger.info(f"Agent run completed. Final output: {result.final_output[:100] if result.final_output else 'None'}...")
                     
@@ -300,6 +407,14 @@ async def chat_stream(request: ChatRequest):
         except Exception as e:
             logger.error(f"Error in streaming: {str(e)}", exc_info=True)
             yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
+        finally:
+            # Cancel agent task if still running
+            if agent_task and not agent_task.done():
+                agent_task.cancel()
+                try:
+                    await agent_task
+                except asyncio.CancelledError:
+                    pass
     
     return StreamingResponse(
         event_generator(),

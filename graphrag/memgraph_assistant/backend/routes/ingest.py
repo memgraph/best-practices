@@ -5,596 +5,368 @@ import os
 import json
 import logging
 import sys
-import re
-from typing import List
+from typing import List, Dict, Any
 from fastapi import APIRouter, HTTPException, Request
-from fastapi.responses import StreamingResponse
 import httpx
 from bs4 import BeautifulSoup
 import json
 import asyncio
+from openai import OpenAI
 
 # Add parent directory to path for imports
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from unstructured2graph import from_unstructured, make_chunks, compute_embeddings
+from unstructured2graph import from_unstructured, compute_embeddings
 from resources import initialize_resources
+from routes.url_discovery import (
+    discover_documentation_urls_stream,
+    discover_documentation_urls,
+    load_cached_urls_metadata,
+    MEMGRAPH_DOCS_BASE_URL
+)
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ingest", tags=["ingestion"])
 
-# Base URL for Memgraph documentation
-MEMGRAPH_DOCS_BASE_URL = "https://memgraph.com/docs"
 
-# Cache file for discovered URLs
-CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "cache")
-CACHE_FILE = os.path.join(CACHE_DIR, "discovered_urls.json")
+def _escape_cypher_string(value: str) -> str:
+    """Escape single quotes and backslashes for safe Cypher string interpolation."""
+    return value.replace("\\", "\\\\").replace("'", "\\'")
 
+# OpenAI client for extracting Cypher queries
+OPENAI_CLIENT = None
 
-def ensure_cache_dir():
-    """Ensure the cache directory exists."""
-    os.makedirs(CACHE_DIR, exist_ok=True)
-
-
-def load_cached_urls() -> List[str]:
-    """Load cached URLs from file if it exists."""
-    ensure_cache_dir()
-    if os.path.exists(CACHE_FILE):
-        try:
-            with open(CACHE_FILE, 'r') as f:
-                data = json.load(f)
-                urls = data.get('urls', [])
-                logger.info(f"Loaded {len(urls)} URLs from cache")
-                return urls
-        except Exception as e:
-            logger.warning(f"Error loading cache: {str(e)}")
-            return []
-    return []
+def get_openai_client():
+    """Get or create OpenAI client."""
+    global OPENAI_CLIENT
+    if OPENAI_CLIENT is None:
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise ValueError("OPENAI_API_KEY environment variable is not set")
+        OPENAI_CLIENT = OpenAI(api_key=api_key)
+    return OPENAI_CLIENT
 
 
-def save_urls_to_cache(urls: List[str]):
-    """Save discovered URLs to cache file."""
-    ensure_cache_dir()
-    try:
-        with open(CACHE_FILE, 'w') as f:
-            json.dump({'urls': urls}, f, indent=2)
-        logger.info(f"Saved {len(urls)} URLs to cache")
-    except Exception as e:
-        logger.warning(f"Error saving cache: {str(e)}")
-
-
-async def discover_documentation_urls_stream(use_cache: bool = True, force_refresh: bool = False):
+async def extract_cypher_queries_from_url(url: str) -> List[Dict[str, Any]]:
     """
-    Generator that yields URLs as they are discovered.
+    Extract Cypher queries from a documentation page using LLM.
     
     Args:
-        use_cache: If True, check cache first and use cached URLs if available
-        force_refresh: If True, ignore cache and scrape fresh URLs
+        url: The URL of the documentation page
+        
+    Returns:
+        List of dictionaries with keys: entity_id, query, description
     """
-    from collections import deque
-    
-    # Check cache first if enabled and not forcing refresh
-    if use_cache and not force_refresh:
-        cached_urls = load_cached_urls()
-        if cached_urls:
-            logger.info(f"Using {len(cached_urls)} cached URLs")
-            for url in cached_urls:
-                yield url
-            return
-    
-    urls = []
-    visited = set()
-    seen_urls = set()  # Track normalized URLs to avoid duplicates
-    to_visit = deque([(MEMGRAPH_DOCS_BASE_URL, 0)])  # (url, depth)
-    max_depth = 15
-    
-    # Patterns to identify documentation navigation elements
-    nav_selectors = [
-        'nav a',  # Navigation links
-        '.sidebar a',  # Sidebar links
-        '.navigation a',  # Navigation class
-        '[role="navigation"] a',  # ARIA navigation
-        '.docs-nav a',  # Docs-specific navigation
-        '.menu a',  # Menu links
-        'aside a',  # Aside/sidebar
-    ]
-    
-    # Patterns to identify content links
-    content_selectors = [
-        'article a',
-        '.content a',
-        'main a',
-        '.docs-content a',
-    ]
-    
-    async def is_valid_docs_url(url: str) -> bool:
-        """Check if URL is a valid documentation page."""
-        if not url or 'memgraph.com/docs' not in url:
-            return False
-        
-        # Skip common non-content URLs
-        skip_patterns = [
-            '/search',
-            '/api/',
-            '.pdf',
-            '.zip',
-            '.tar.gz',
-            'mailto:',
-            'javascript:',
-            '#',
-        ]
-        
-        for pattern in skip_patterns:
-            if pattern in url.lower():
-                return False
-        
-        # Must be a docs page
-        return 'memgraph.com/docs' in url
-    
-    async def normalize_url(url: str) -> str:
-        """Normalize URL by removing fragments and query params."""
-        # Remove fragment
-        url = url.split('#')[0]
-        # Remove query params (but keep path)
-        if '?' in url:
-            base, _ = url.split('?', 1)
-            # Only remove query if it's not essential
-            if 'page=' not in url.lower() and 'offset=' not in url.lower():
-                url = base
-        return url.rstrip('/')
-    
-    async def extract_links_from_page(soup: BeautifulSoup, base_url: str) -> List[str]:
-        """Extract documentation links from a page."""
-        found_links = set()
-        
-        # First, try to find navigation/sidebar links (higher priority)
-        for selector in nav_selectors:
-            try:
-                for link in soup.select(selector):
-                    href = link.get('href', '')
-                    if href:
-                        # Convert to absolute URL
-                        if href.startswith('/docs'):
-                            full_url = f"https://memgraph.com{href}"
-                        elif href.startswith('/'):
-                            # Skip non-docs root links
-                            continue
-                        elif href.startswith('http') and 'memgraph.com/docs' in href:
-                            full_url = href
-                        else:
-                            continue
-                        
-                        full_url = await normalize_url(full_url)
-                        if await is_valid_docs_url(full_url):
-                            found_links.add(full_url)
-            except Exception as e:
-                logger.debug(f"Error with selector {selector}: {str(e)}")
-        
-        # Then, find content links (lower priority, but still useful)
-        for selector in content_selectors:
-            try:
-                for link in soup.select(selector):
-                    href = link.get('href', '')
-                    if href:
-                        if href.startswith('/docs'):
-                            full_url = f"https://memgraph.com{href}"
-                        elif href.startswith('http') and 'memgraph.com/docs' in href:
-                            full_url = href
-                        else:
-                            continue
-                        
-                        full_url = await normalize_url(full_url)
-                        if await is_valid_docs_url(full_url):
-                            found_links.add(full_url)
-            except Exception as e:
-                logger.debug(f"Error with selector {selector}: {str(e)}")
-        
-        # Fallback: find all links if selectors didn't work
-        if not found_links:
-            for link in soup.find_all('a', href=True):
-                href = link['href']
-                if href.startswith('/docs'):
-                    full_url = f"https://memgraph.com{href}"
-                elif href.startswith('http') and 'memgraph.com/docs' in href:
-                    full_url = href
-                else:
-                    continue
-                
-                full_url = await normalize_url(full_url)
-                if await is_valid_docs_url(full_url):
-                    found_links.add(full_url)
-        
-        return list(found_links)
-    
-    # Use queue-based BFS instead of recursion
-    async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
-        while to_visit:
-            url, depth = to_visit.popleft()
+    try:
+        # Fetch the page content
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+            response = await client.get(url)
+            response.raise_for_status()
             
-            # Skip if already visited or too deep
-            if url in visited or depth > max_depth:
+            # Parse HTML
+            soup = BeautifulSoup(response.text, 'html.parser')
+            
+            # Extract text content (remove scripts, styles, etc.)
+            for script in soup(["script", "style", "nav", "header", "footer"]):
+                script.decompose()
+            
+            # Get main content
+            main_content = soup.get_text(separator='\n', strip=True)
+            
+            # Limit content size to avoid token limits (keep first 15000 chars)
+            if len(main_content) > 15000:
+                main_content = main_content[:15000] + "..."
+            
+            # Extract page title/entity from URL or page
+            entity_id = url.split('/')[-1] or url.split('/')[-2]
+            # Try to get title from page
+            title_tag = soup.find('title')
+            if title_tag:
+                title_text = title_tag.get_text().strip()
+                # Extract concept name from title (e.g., "PageRank - Memgraph Documentation" -> "pagerank")
+                entity_id = title_text.split('-')[0].strip().lower().replace(' ', '')
+            
+            # Prepare prompt for LLM
+            prompt = f"""Extract all Cypher queries from the following Memgraph documentation page.
+
+URL: {url}
+Entity/Concept: {entity_id}
+
+Page Content:
+{main_content}
+
+Please extract all Cypher queries found in this documentation page and return them as a JSON object with a "queries" key containing an array. For each query, provide:
+1. entity_id: The concept/feature being explained (e.g., "pagerank", "bfs", "shortest_path")
+2. query: The raw Cypher query exactly as shown in the documentation
+3. description: A brief description of what the query does
+
+Return ONLY a valid JSON object in this format:
+{{
+  "queries": [
+    {{
+      "entity_id": "concept_name",
+      "query": "CALL pagerank.get() YIELD node, rank;",
+      "description": "Calculates the PageRank for the nodes in the graph."
+    }},
+    ...
+  ]
+}}
+
+If no queries are found, return {{"queries": []}}.
+
+Important:
+- Extract queries exactly as written (preserve formatting, line breaks, etc.)
+- Include all queries: examples, setup queries, result queries, etc.
+- The entity_id should represent the main concept being explained on this page
+- Return valid JSON only, no markdown formatting or explanations"""
+
+            # Call OpenAI API
+            client = get_openai_client()
+            model = os.getenv("CHAT_MODEL", "gpt-4o")
+            
+            response = client.chat.completions.create(
+                model=model,
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "You are a helpful assistant that extracts Cypher queries from documentation. Always return valid JSON with a 'queries' key containing an array."
+                    },
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                temperature=0.1,
+                response_format={"type": "json_object"}
+            )
+            
+            # Parse response
+            content = response.choices[0].message.content
+            result = json.loads(content)
+            
+            # Handle {"queries": [...]} format
+            if isinstance(result, dict) and "queries" in result:
+                queries = result["queries"]
+            elif isinstance(result, list):
+                # Fallback if LLM returns array directly
+                queries = result
+            else:
+                logger.warning(f"Unexpected response format from LLM for {url}: {result}")
+                queries = []
+            
+            # Validate and normalize queries
+            normalized_queries = []
+            for query_data in queries:
+                if isinstance(query_data, dict) and "query" in query_data:
+                    normalized_queries.append({
+                        "entity_id": query_data.get("entity_id", entity_id),
+                        "query": query_data.get("query", ""),
+                        "description": query_data.get("description", "")
+                    })
+            
+            logger.info(f"Extracted {len(normalized_queries)} Cypher queries from {url}")
+            return normalized_queries
+            
+    except Exception as e:
+        logger.error(f"Error extracting Cypher queries from {url}: {str(e)}", exc_info=True)
+        return []
+
+
+async def is_url_processed(memgraph, url: str) -> bool:
+    """
+    Check if a URL has already been processed.
+    
+    Args:
+        memgraph: Memgraph database connection
+        url: The URL to check
+        
+    Returns:
+        True if URL has been processed, False otherwise
+    """
+    try:
+        url_escaped = _escape_cypher_string(url)
+        result = memgraph.query(f"MATCH (p:ProcessedUrls {{url: '{url_escaped}'}}) RETURN p LIMIT 1")
+        return len(result) > 0
+    except Exception as e:
+        logger.warning(f"Error checking if URL is processed {url}: {str(e)}")
+        return False
+
+
+async def mark_url_as_processed(memgraph, url: str):
+    """
+    Mark a URL as processed by creating/merging a ProcessedUrls node.
+
+    Args:
+        memgraph: Memgraph database connection
+        url: The URL that was processed
+    """
+    try:
+        url_escaped = _escape_cypher_string(url)
+        memgraph.query(f"MERGE (p:ProcessedUrls {{url: '{url_escaped}'}})")
+        logger.debug(f"Marked URL as processed: {url}")
+    except Exception as e:
+        logger.warning(f"Error marking URL as processed {url}: {str(e)}")
+
+
+async def insert_url_nodes(memgraph, urls_metadata: List[Dict[str, Any]]):
+    """
+    Insert discovered URLs with metadata into Memgraph as Url nodes.
+    Creates a node for each URL with metadata properties (name, description, keywords).
+    Creates HAS_CHILD_LINK relationships for children_urls and HAS_CONTENT_LINK for content_links.
+
+    Args:
+        memgraph: Memgraph database connection
+        urls_metadata: List of URL metadata dictionaries with keys: url, description, keywords, children_urls, content_links
+    """
+    if not urls_metadata:
+        return
+
+    inserted_count = 0
+    child_link_count = 0
+    content_link_count = 0
+    
+    for url_data in urls_metadata:
+        try:
+            # Extract URL and metadata
+            if isinstance(url_data, dict):
+                url = url_data.get("url", "")
+                description = url_data.get("description", "")
+                keywords = url_data.get("keywords", "")
+                children_urls = url_data.get("children_urls", [])
+                content_links = url_data.get("content_links", [])
+            else:
+                url = url_data
+                description = keywords = ""
+                children_urls = []
+                content_links = []
+
+            if not url:
+                continue
+
+            # Skip URLs with no metadata and no links
+            if not description and not keywords and not children_urls and not content_links:
+                logger.debug(f"Skipping URL with no metadata and no links: {url}")
+                continue
+
+            # Create/update URL node
+            url_escaped = _escape_cypher_string(url)
+            description_escaped = _escape_cypher_string(description)
+            keywords_escaped = _escape_cypher_string(keywords)
+            
+            memgraph.query(f"""
+                MERGE (u:Url {{name: '{url_escaped}'}})
+                SET u += {{description: '{description_escaped}', keywords: '{keywords_escaped}'}}
+            """)
+            inserted_count += 1
+
+            # Create HAS_CHILD_LINK relationships for children_urls
+            if children_urls:
+                parent_escaped = url_escaped
+                for child_url in children_urls:
+                    try:
+                        child_escaped = _escape_cypher_string(child_url)
+                        memgraph.query(f"""
+                            MERGE (parent:Url {{name: '{parent_escaped}'}})
+                            MERGE (child:Url {{name: '{child_escaped}'}})
+                            MERGE (parent)-[:HAS_CHILD_LINK]->(child)
+                        """)
+                        child_link_count += 1
+                    except Exception as e:
+                        logger.warning(f"Error creating HAS_CHILD_LINK relationship from {url} to {child_url}: {str(e)}")
+
+            # Create HAS_CONTENT_LINK relationships for content_links
+            if content_links:
+                parent_escaped = url_escaped
+                for content_url in content_links:
+                    try:
+                        content_escaped = _escape_cypher_string(content_url)
+                        memgraph.query(f"""
+                            MERGE (parent:Url {{name: '{parent_escaped}'}})
+                            MERGE (content:Url {{name: '{content_escaped}'}})
+                            MERGE (parent)-[:HAS_CONTENT_LINK]->(content)
+                        """)
+                        content_link_count += 1
+                    except Exception as e:
+                        logger.warning(f"Error creating HAS_CONTENT_LINK relationship from {url} to {content_url}: {str(e)}")
+        except Exception as e:
+            logger.warning(f"Error processing URL {url_data}: {str(e)}")
+
+    logger.info(f"Inserted {inserted_count} Url nodes, {child_link_count} HAS_CHILD_LINK relationships, and {content_link_count} HAS_CONTENT_LINK relationships into Memgraph")
+
+
+async def store_cypher_queries(memgraph, queries: List[Dict[str, Any]], source_url: str):
+    """
+    Store extracted Cypher queries in Memgraph.
+    
+    Args:
+        memgraph: Memgraph database connection
+        queries: List of query dictionaries with entity_id, query, description
+        source_url: The URL where queries were extracted from
+    """
+    if not queries:
+        return
+    
+    for query_data in queries:
+        try:
+            entity_id = query_data.get("entity_id", "").strip()
+            query_text = query_data.get("query", "").strip()
+            description = query_data.get("description", "").strip()
+            
+            if not entity_id or not query_text:
+                logger.warning(f"Skipping query with missing entity_id or query: {query_data}")
                 continue
             
-            visited.add(url)
+            # Escape strings for safe Cypher interpolation
+            entity_id_escaped = _escape_cypher_string(entity_id)
+            query_text_escaped = _escape_cypher_string(query_text).replace("\n", "\\n")
+            description_escaped = _escape_cypher_string(description)
+            source_url_escaped = _escape_cypher_string(source_url)
             
-            try:
-                logger.info(f"Scraping page (depth {depth}): {url}")
-                response = await client.get(url)
-                response.raise_for_status()
-                
-                # Only process HTML pages
-                content_type = response.headers.get('content-type', '').lower()
-                if 'text/html' not in content_type:
-                    logger.debug(f"Skipping non-HTML content: {url}")
-                    continue
-                
-                soup = BeautifulSoup(response.text, 'html.parser')
-                
-                # Extract links from this page
-                found_links = await extract_links_from_page(soup, url)
-                
-                # Add found links to queue and results
-                for link_url in found_links:
-                    if link_url not in visited:
-                        # Normalize and check for duplicates
-                        normalized = await normalize_url(link_url)
-                        if normalized not in seen_urls:
-                            seen_urls.add(normalized)
-                            urls.append(link_url)
-                            logger.info(f"Found documentation page: {link_url}")
-                            # Yield the URL as it's discovered
-                            yield link_url
-                        
-                        # Add to queue for further exploration (use original URL for queue)
-                        if depth < max_depth:
-                            to_visit.append((link_url, depth + 1))
-                
-            except httpx.HTTPStatusError as e:
-                logger.warning(f"HTTP error scraping {url}: {e.response.status_code}")
-            except httpx.TimeoutException:
-                logger.warning(f"Timeout scraping {url}")
-            except Exception as e:
-                logger.warning(f"Error scraping {url}: {str(e)}")
-    
-    logger.info(f"Discovered {len(urls)} unique documentation pages")
-    
-    # Save discovered URLs to cache
-    if urls:
-        save_urls_to_cache(urls)
-    
-    # Note: Async generators cannot return values, they just end naturally
-
-
-async def discover_documentation_urls() -> List[str]:
-    """
-    Discover all documentation URLs from memgraph.com/docs.
-    Returns a list of all discovered URLs.
-    Uses the streaming version internally and collects all URLs.
-    """
-    urls = []
-    async for url in discover_documentation_urls_stream():
-        urls.append(url)
-    return urls
-
-
-@router.post("/discover")
-async def discover_docs(request: Request):
-    """
-    Discover all documentation URLs from memgraph.com/docs.
-    Returns a list of URLs that can be ingested.
-    
-    Optional JSON body:
-    {
-        "force_refresh": false  # If true, ignore cache and scrape fresh URLs
-    }
-    """
-    try:
-        try:
-            body = await request.json()
-            force_refresh = body.get("force_refresh", False)
-        except:
-            force_refresh = False
-        
-        urls = []
-        async for url in discover_documentation_urls_stream(use_cache=True, force_refresh=force_refresh):
-            urls.append(url)
-        
-        return {
-            "urls": urls,
-            "count": len(urls),
-            "status": "success"
-        }
-    except Exception as e:
-        logger.error(f"Error discovering documentation: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error discovering documentation: {str(e)}"
-        )
-
-
-@router.post("/discover-stream")
-async def discover_docs_stream(request: Request):
-    """
-    Discover all documentation URLs from memgraph.com/docs with streaming.
-    Streams URLs as they are discovered via Server-Sent Events (SSE).
-    
-    Optional JSON body:
-    {
-        "force_refresh": false  # If true, ignore cache and scrape fresh URLs
-    }
-    """
-    try:
-        body = await request.json()
-        force_refresh = body.get("force_refresh", False)
-    except:
-        force_refresh = False
-    
-    async def event_generator():
-        """Generator function for SSE events."""
-        urls = []
-        
-        try:
-            async for url in discover_documentation_urls_stream(use_cache=True, force_refresh=force_refresh):
-                urls.append(url)
-                yield f"data: {json.dumps({'type': 'url', 'url': url, 'count': len(urls)})}\n\n"
-            
-            # Send completion message
-            yield f"data: {json.dumps({'type': 'complete', 'total_count': len(urls)})}\n\n"
-        
+            memgraph.query(f"""
+                CREATE (q:CypherQuery {{
+                    entity_id: '{entity_id_escaped}',
+                    query: '{query_text_escaped}',
+                    description: '{description_escaped}',
+                    source_url: '{source_url_escaped}'
+                }})
+            """)
         except Exception as e:
-            logger.error(f"Error in streaming discovery: {str(e)}", exc_info=True)
-            yield f"data: {json.dumps({'type': 'error', 'error': str(e)})}\n\n"
-    
-    return StreamingResponse(
-        event_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        }
-    )
+            logger.warning(f"Error storing query for entity {query_data.get('entity_id')}: {str(e)}")
 
 
-@router.post("/scrape-all")
-async def scrape_all_docs():
+async def insert_url_nodes_from_metadata(
+    memgraph,
+    urls_metadata_discovered: List[Dict[str, Any]]
+):
     """
-    Automatically discover and ingest all documentation from memgraph.com/docs.
+    Insert URL nodes with metadata into Memgraph.
+    Uses discovered metadata if available.
+
+    Args:
+        memgraph: Memgraph database connection
+        urls_metadata_discovered: Metadata from discovery (if discovery was used) - contains URLs in metadata
     """
-    # Verify OPENAI_API_KEY is set
-    if not os.getenv("OPENAI_API_KEY"):
-        raise HTTPException(
-            status_code=500,
-            detail="OPENAI_API_KEY environment variable is not set. Please set your OpenAI API key."
-        )
+    if not urls_metadata_discovered:
+        logger.warning("No discovered metadata available. Cannot create URL nodes without metadata.")
+        return
 
-    try:
-        # Discover all documentation URLs
-        logger.info("Discovering documentation URLs...")
-        urls = await discover_documentation_urls()
-        
-        if not urls:
-            raise HTTPException(
-                status_code=500,
-                detail="No documentation URLs discovered. Please check the discovery endpoint."
-            )
-        
-        logger.info(f"Processing {len(urls)} documentation pages. Starting ingestion...")
+    # Use discovered metadata - only insert valid URLs
+    urls_metadata_to_insert = []
+    valid_count = sum(1 for u in urls_metadata_discovered if isinstance(u, dict) and u.get("valid", True))
+    logger.info(f"Using discovered metadata for {len(urls_metadata_discovered)} URLs ({valid_count} valid)")
+    for url_meta in urls_metadata_discovered:
+        # Only process valid URLs
+        if isinstance(url_meta, dict) and not url_meta.get("valid", True):
+            logger.debug(f"Skipping invalid URL: {url_meta.get('url', 'unknown')}")
+            continue
+        url = url_meta.get("url", url_meta) if isinstance(url_meta, dict) else url_meta
+        if not await is_url_processed(memgraph, url):
+            urls_metadata_to_insert.append(url_meta)
 
-        # Initialize resources once at the beginning (with cleanup)
-        memgraph, lightrag_wrapper = await initialize_resources(
-            cleanup=True, 
-            create_vector_index=True
-        )
-
-        # Process documents one by one - from_unstructured called once per URL
-        for idx, url in enumerate(urls, 1):
-            logger.info(f"Processing document {idx}/{len(urls)}: {url}")
-
-            # Ingest single document
-            await from_unstructured(
-                [url],
-                memgraph,
-                lightrag_wrapper,
-                only_chunks=False,
-                link_chunks=True,
-            )
-
-        # Create vector index and compute embeddings after all documents are ingested
-        logger.info("Creating vector search index and computing embeddings...")
-        try:
-            compute_embeddings(memgraph, "Chunk")
-            logger.info("Successfully created vector index and computed embeddings")
-        except Exception as e:
-            logger.warning(f"Error creating vector index or computing embeddings: {str(e)}")
-
-        logger.info("Successfully ingested all documentation pages into Memgraph!")
-
-        return {
-            "message": "Successfully ingested all documentation pages into Memgraph!",
-            "urls_processed": len(urls),
-            "urls": urls[:10],  # Return first 10 as sample
-            "status": "completed"
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Error during ingestion: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error during ingestion: {str(e)}"
-        )
-
-
-@router.post("")
-async def ingest_documents(request: Request):
-    """
-    Ingest unstructured documents from URLs into Memgraph.
-    
-    Expected JSON body:
-    {
-        "urls": ["url1", "url2", ...],
-        "only_chunks": false,
-        "link_chunks": true,
-        "create_vector_index": true,
-        "cleanup": true
-    }
-    """
-    # Parse request body
-    try:
-        body = await request.json()
-    except json.JSONDecodeError:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid JSON in request body"
-        )
-    
-    # Extract parameters with defaults
-    urls = body.get("urls", [])
-    only_chunks = body.get("only_chunks", False)
-    link_chunks = body.get("link_chunks", True)
-    create_vector_index = body.get("create_vector_index", True)
-    cleanup = body.get("cleanup", True)
-    
-    # Verify OPENAI_API_KEY is set
-    if not os.getenv("OPENAI_API_KEY"):
-        raise HTTPException(
-            status_code=500,
-            detail="OPENAI_API_KEY environment variable is not set. Please set your OpenAI API key."
-        )
-
-    if not urls or not isinstance(urls, list):
-        raise HTTPException(
-            status_code=400,
-            detail="No URLs provided. Please provide at least one URL in the 'urls' array."
-        )
-
-    try:
-        logger.info(f"Processing {len(urls)} documentation pages. Starting ingestion...")
-
-        memgraph, lightrag_wrapper = await initialize_resources(
-            cleanup=cleanup, 
-            create_vector_index=create_vector_index
-        )
-
-        # Ingest documents
-        await from_unstructured(
-            urls,
-            memgraph,
-            lightrag_wrapper,
-            only_chunks=only_chunks,
-            link_chunks=link_chunks,
-        )
-
-        # Create vector index and compute embeddings if requested
-        if create_vector_index:
-            logger.info("Creating vector search index and computing embeddings...")
-            try:
-                compute_embeddings(memgraph, "Chunk")
-                logger.info("Successfully created vector index and computed embeddings")
-            except Exception as e:
-                logger.warning(f"Error creating vector index or computing embeddings: {str(e)}")
-
-        logger.info("Successfully ingested all documentation pages into Memgraph!")
-
-        return {
-            "message": "Successfully ingested all documentation pages into Memgraph!",
-            "urls_processed": len(urls),
-            "status": "completed"
-        }
-
-    except Exception as e:
-        logger.error(f"Error during ingestion: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error during ingestion: {str(e)}"
-        )
-
-
-@router.post("/single")
-async def ingest_single_document(request: Request):
-    """
-    Ingest a single document from a URL into Memgraph.
-    Useful for progress tracking - process one document at a time.
-    
-    Expected JSON body:
-    {
-        "url": "https://example.com/doc",
-        "only_chunks": false,
-        "link_chunks": true,
-        "create_vector_index": true,
-        "cleanup": false  # Usually false for single document ingestion
-    }
-    """
-    # Parse request body
-    try:
-        body = await request.json()
-    except json.JSONDecodeError:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid JSON in request body"
-        )
-    
-    # Extract parameters with defaults
-    url = body.get("url")
-    only_chunks = body.get("only_chunks", False)
-    link_chunks = body.get("link_chunks", True)
-    create_vector_index = body.get("create_vector_index", True)
-    cleanup = body.get("cleanup", False)
-    
-    # Verify OPENAI_API_KEY is set
-    if not os.getenv("OPENAI_API_KEY"):
-        raise HTTPException(
-            status_code=500,
-            detail="OPENAI_API_KEY environment variable is not set. Please set your OpenAI API key."
-        )
-
-    if not url or not isinstance(url, str):
-        raise HTTPException(
-            status_code=400,
-            detail="No URL provided. Please provide a 'url' string."
-        )
-
-    try:
-        logger.info(f"Processing single document: {url}")
-
-        memgraph, lightrag_wrapper = await initialize_resources(cleanup=cleanup, create_vector_index=create_vector_index)
-
-        # Ingest single document
-        await from_unstructured(
-            [url],
-            memgraph,
-            lightrag_wrapper,
-            only_chunks=only_chunks,
-            link_chunks=link_chunks,
-        )
-
-        # Create vector index and compute embeddings if requested
-        if create_vector_index:
-            logger.info("Computing embeddings and creating vector search index...")
-            try:
-                # Compute embeddings for all chunks (including newly added ones)
-                compute_embeddings(memgraph, "Chunk")
-                logger.info("Successfully computed embeddings and created vector index")
-            except Exception as e:
-                logger.warning(f"Error computing embeddings or creating vector index: {str(e)}")
-
-        logger.info(f"Successfully ingested document: {url}")
-
-        return {
-            "message": f"Successfully ingested document: {url}",
-            "url": url,
-            "status": "completed"
-        }
-
-    except Exception as e:
-        logger.error(f"Error during ingestion: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error during ingestion: {str(e)}"
-        )
+    if urls_metadata_to_insert:
+        logger.info(f"Inserting {len(urls_metadata_to_insert)} URL nodes with metadata into Memgraph...")
+        await insert_url_nodes(memgraph, urls_metadata_to_insert)
 
 
 @router.post("/batch")
@@ -602,13 +374,15 @@ async def ingest_batch_documents(request: Request):
     """
     Ingest multiple documents from URLs into Memgraph.
     Processes documents one by one and returns success when all are done.
-    
+
     Expected JSON body:
     {
-        "urls": ["url1", "url2", ...],
+        "urls": ["url1", "url2", ...],  # URLs to ingest (optional - if not provided, will discover all docs)
+        "scrape_cypher_queries": true,
         "only_chunks": false,
         "link_chunks": true,
         "create_vector_index": true,
+        "create_text_index": true,
         "cleanup": false
     }
     """
@@ -623,11 +397,13 @@ async def ingest_batch_documents(request: Request):
     
     # Extract parameters with defaults
     urls = body.get("urls", [])
+    scrape_cypher_queries = body.get("scrape_cypher_queries", True)
     only_chunks = body.get("only_chunks", False)
     link_chunks = body.get("link_chunks", True)
     create_vector_index = body.get("create_vector_index", True)
+    create_text_index = body.get("create_text_index", True)
     cleanup = body.get("cleanup", False)
-    
+
     # Verify OPENAI_API_KEY is set
     if not os.getenv("OPENAI_API_KEY"):
         raise HTTPException(
@@ -635,24 +411,57 @@ async def ingest_batch_documents(request: Request):
             detail="OPENAI_API_KEY environment variable is not set. Please set your OpenAI API key."
         )
 
-    if not urls or not isinstance(urls, list):
-        raise HTTPException(
-            status_code=400,
-            detail="No URLs provided. Please provide at least one URL in the 'urls' array."
-        )
+    urls_metadata_discovered = load_cached_urls_metadata()
+    if not urls_metadata_discovered:
+        urls_metadata_discovered = await discover_documentation_urls()
+
+    # If no URLs provided, extract URLs from discovered metadata for processing (only valid ones)
+    if not urls or not isinstance(urls, list) or len(urls) == 0:
+        urls = [
+            u.get("url", u) if isinstance(u, dict) else u 
+            for u in urls_metadata_discovered 
+            if isinstance(u, dict) and u.get("valid", True)
+        ]
+        logger.info(f"Extracted {len(urls)} valid URLs from discovered metadata for processing")
 
     try:
         logger.info(f"Processing batch of {len(urls)} documents. Starting ingestion...")
 
         # Initialize resources once at the beginning (with cleanup and vector index if requested)
         memgraph, lightrag_wrapper = await initialize_resources(
-            cleanup=cleanup, 
-            create_vector_index=create_vector_index
+            cleanup=cleanup,
+            create_vector_index=create_vector_index,
+            create_text_index=create_text_index
+        )
+
+        # Insert URL nodes with metadata (always enabled)
+        await insert_url_nodes_from_metadata(
+            memgraph,
+            urls_metadata_discovered
         )
 
         # Process documents one by one - from_unstructured called once per URL
+        processed_count = 0
+        skipped_count = 0
+
         for idx, url in enumerate(urls, 1):
+            # Check if URL has already been processed
+            if await is_url_processed(memgraph, url):
+                logger.info(f"Skipping already processed document {idx}/{len(urls)}: {url}")
+                skipped_count += 1
+                continue
+
             logger.info(f"Processing document {idx}/{len(urls)}: {url}")
+
+            # Extract Cypher queries from the page if enabled
+            if scrape_cypher_queries:
+                logger.info(f"Extracting Cypher queries from {url}...")
+                cypher_queries = await extract_cypher_queries_from_url(url)
+
+                # Store extracted Cypher queries in Memgraph
+                if cypher_queries:
+                    logger.info(f"Storing {len(cypher_queries)} Cypher queries in Memgraph...")
+                    await store_cypher_queries(memgraph, cypher_queries, url)
 
             # Ingest single document
             await from_unstructured(
@@ -663,6 +472,10 @@ async def ingest_batch_documents(request: Request):
                 link_chunks=link_chunks,
             )
 
+            # Mark URL as processed
+            await mark_url_as_processed(memgraph, url)
+            processed_count += 1
+
         # Compute embeddings after all documents are ingested (index is already created by initialize_resources)
         if create_vector_index:
             logger.info("Computing embeddings for all chunks...")
@@ -672,11 +485,12 @@ async def ingest_batch_documents(request: Request):
             except Exception as e:
                 logger.warning(f"Error computing embeddings: {str(e)}")
 
-        logger.info(f"Successfully ingested all {len(urls)} documents into Memgraph!")
+        logger.info(f"Successfully ingested {processed_count} document(s) into Memgraph! ({skipped_count} skipped)")
 
         return {
-            "message": f"Successfully ingested {len(urls)} document(s) into Memgraph!",
-            "urls_processed": len(urls),
+            "message": f"Successfully ingested {processed_count} document(s) into Memgraph!",
+            "urls_processed": processed_count,
+            "urls_skipped": skipped_count,
             "status": "completed"
         }
 
@@ -685,66 +499,5 @@ async def ingest_batch_documents(request: Request):
         raise HTTPException(
             status_code=500,
             detail=f"Error during batch ingestion: {str(e)}"
-        )
-
-
-@router.post("/estimate")
-async def estimate_ingestion(request: Request):
-    """
-    Estimate the number of chunks and processing time for given URLs.
-    Returns chunk count per document and total estimated time (10 seconds per chunk).
-    
-    Expected JSON body:
-    {
-        "urls": ["url1", "url2", ...]
-    }
-    """
-    try:
-        body = await request.json()
-    except json.JSONDecodeError:
-        raise HTTPException(
-            status_code=400,
-            detail="Invalid JSON in request body"
-        )
-    
-    urls = body.get("urls", [])
-    
-    if not urls or not isinstance(urls, list):
-        raise HTTPException(
-            status_code=400,
-            detail="No URLs provided. Please provide at least one URL in the 'urls' array."
-        )
-    
-    try:
-        # Get chunk estimates without full processing
-        chunked_documents = make_chunks(urls)
-        
-        estimates = []
-        total_chunks = 0
-        
-        for doc in chunked_documents:
-            chunk_count = len(doc.chunks)
-            total_chunks += chunk_count
-            estimated_time = chunk_count * 10  # 10 seconds per chunk
-            
-            estimates.append({
-                "url": str(doc.source),
-                "chunk_count": chunk_count,
-                "estimated_time_seconds": estimated_time
-            })
-        
-        total_estimated_time = total_chunks * 10
-        
-        return {
-            "total_chunks": total_chunks,
-            "total_estimated_time_seconds": total_estimated_time,
-            "documents": estimates
-        }
-    
-    except Exception as e:
-        logger.error(f"Error estimating ingestion: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error estimating ingestion: {str(e)}"
         )
 
