@@ -1,24 +1,25 @@
 """
 Common utilities for LLM interactions.
 """
+import json
 import os
 import logging
 from typing import Optional
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 logger = logging.getLogger(__name__)
 
-_openai_client: Optional[OpenAI] = None
+_openai_client: Optional[AsyncOpenAI] = None
 
 
-def get_openai_client() -> OpenAI:
-    """Get or create OpenAI client."""
+def get_openai_client() -> AsyncOpenAI:
+    """Get or create async OpenAI client."""
     global _openai_client
     if _openai_client is None:
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             raise ValueError("OPENAI_API_KEY environment variable is not set")
-        _openai_client = OpenAI(api_key=api_key)
+        _openai_client = AsyncOpenAI(api_key=api_key)
     return _openai_client
 
 
@@ -29,7 +30,7 @@ async def llm_call_json(
     temperature: float = 0.1
 ) -> dict:
     """
-    Make an LLM call with JSON response format.
+    Make an async LLM call with JSON response format.
     
     Args:
         system_prompt: System prompt for the LLM
@@ -40,11 +41,9 @@ async def llm_call_json(
     Returns:
         Parsed JSON response as a dictionary
     """
-    import json
-    
     client = get_openai_client()
     
-    response = client.chat.completions.create(
+    response = await client.chat.completions.create(
         model=model,
         messages=[
             {"role": "system", "content": system_prompt},

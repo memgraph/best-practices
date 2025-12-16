@@ -1,6 +1,5 @@
 """
-URL discovery functionality for scraping and discovering Memgraph documentation URLs.
-Stores URLs as JSON objects with metadata: valid, keywords, summary, content_links.
+URL discovery and content processing for Memgraph documentation.
 """
 import os
 import json
@@ -11,7 +10,7 @@ from collections import deque
 
 import httpx
 from bs4 import BeautifulSoup
-from openai import OpenAI
+from openai import AsyncOpenAI
 
 from prompts import (
     KEYWORDS_SYSTEM_PROMPT,
@@ -19,6 +18,7 @@ from prompts import (
     SUMMARY_SYSTEM_PROMPT,
     SUMMARY_USER_PROMPT_TEMPLATE,
 )
+from html_utils import get_cleaned_inner_main, extract_markdown_content
 from scrape_cypher import extract_cypher_queries_from_content
 from database import store_cypher_queries, update_url_metadata
 from models import DocumentationUrl
@@ -26,29 +26,27 @@ from models import DocumentationUrl
 logger = logging.getLogger(__name__)
 
 MEMGRAPH_DOCS_BASE_URL = "https://memgraph.com/docs"
-CACHE_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cache")
-CACHE_FILE = os.path.join(CACHE_DIR, "discovered_urls.json")
-_openai_client: Optional[OpenAI] = None
+_openai_client: Optional[AsyncOpenAI] = None
 
 
-def get_openai_client() -> Optional[OpenAI]:
+def get_openai_client() -> Optional[AsyncOpenAI]:
     global _openai_client
     if _openai_client is None:
         api_key = os.environ.get("OPENAI_API_KEY")
         if api_key:
-            _openai_client = OpenAI(api_key=api_key)
+            _openai_client = AsyncOpenAI(api_key=api_key)
         else:
             logger.warning("OPENAI_API_KEY not set. LLM features (keywords, summary) will be skipped.")
     return _openai_client
 
 
 async def _llm_call(system_prompt: str, user_prompt: str) -> str:
-    """Helper for LLM calls."""
+    """Helper for async LLM calls."""
     client = get_openai_client()
     if not client:
         return ""
     try:
-        response = client.chat.completions.create(
+        response = await client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
             temperature=0.3
@@ -75,40 +73,6 @@ async def summarize_with_llm(content: str, url: str) -> str:
     return await _llm_call(SUMMARY_SYSTEM_PROMPT, SUMMARY_USER_PROMPT_TEMPLATE.format(content=content[:4000]))
 
 
-def ensure_cache_dir():
-    os.makedirs(CACHE_DIR, exist_ok=True)
-
-
-def load_cached_urls() -> List[Dict[str, Any]]:
-    ensure_cache_dir()
-    if not os.path.exists(CACHE_FILE):
-        return []
-    try:
-        with open(CACHE_FILE, 'r') as f:
-            data = json.load(f)
-        if isinstance(data, list):
-            if data and isinstance(data[0], str):
-                logger.info(f"Converting {len(data)} URLs from old format")
-                return [{"url": u, "valid": None, "keywords": [], "summary": "", "content_links": [], "depth": -1} for u in data]
-            
-            logger.info(f"Loaded {len(data)} URLs from cache")
-            return data
-        return data.get('urls', []) if isinstance(data, dict) else []
-    except Exception as e:
-        logger.warning(f"Error loading cache: {str(e)}")
-        return []
-
-
-def save_urls_to_cache(urls: List[Dict[str, Any]]):
-    ensure_cache_dir()
-    try:
-        with open(CACHE_FILE, 'w') as f:
-            json.dump(urls, f, indent=2)
-        logger.info(f"Saved {len(urls)} URLs to cache")
-    except Exception as e:
-        logger.warning(f"Error saving cache: {str(e)}")
-
-
 def normalize_url(url: str) -> str:
     parsed = urlparse(url)
     normalized = f"{parsed.scheme}://{parsed.netloc}{parsed.path}".rstrip('/')
@@ -119,28 +83,6 @@ def is_valid_docs_url(url: str) -> bool:
     if not url.startswith(MEMGRAPH_DOCS_BASE_URL):
         return False
     return not any(p in url for p in ['/api/', '/search', '/404', '.pdf', '.zip', '.tar.gz', '#'])
-
-
-def get_cleaned_inner_main(soup: BeautifulSoup, require_nested: bool = False) -> Any:
-    outer_main = soup.find('main')
-    if not outer_main:
-        if require_nested:
-            raise ValueError("No outer <main> tag found")
-        inner_main = soup.find('body') or soup
-    else:
-        inner_main = outer_main.find('main') or (outer_main if not require_nested else None)
-        if not inner_main and require_nested:
-            raise ValueError("No nested <main> tag found inside outer <main> tag")
-        inner_main = inner_main or outer_main
-    
-    for tag in ["script", "style", "nav", "aside", "header", "footer"]:
-        for element in inner_main(tag):
-            element.decompose()
-    return inner_main
-
-
-def extract_text_content(soup: BeautifulSoup) -> str:
-    return get_cleaned_inner_main(soup, require_nested=False).get_text(separator=' ', strip=True)
 
 
 async def extract_links_from_element(element: Any, base_url: str, exclude_base: bool = True) -> List[str]:
@@ -188,17 +130,17 @@ async def process_url_content(memgraph, urls: List[str]) -> int:
                     continue
                 
                 soup = BeautifulSoup(response.text, 'html.parser')
-                text_content = extract_text_content(soup)
+                markdown_content = extract_markdown_content(soup)
                 
-                if text_content:
-                    queries = await extract_cypher_queries_from_content(text_content, url, soup)
+                if markdown_content:
+                    queries = await extract_cypher_queries_from_content(markdown_content, url, soup)
                     if queries:
                         await store_cypher_queries(memgraph, queries, url)
                         cypher_queries_count += len(queries)
                     
-                    keywords = await extract_keywords_with_llm(text_content, url)
-                    summary = await summarize_with_llm(text_content, url)
-                    update_url_metadata(memgraph, url, summary, keywords, len(text_content))
+                    keywords = await extract_keywords_with_llm(markdown_content, url)
+                    summary = await summarize_with_llm(markdown_content, url)
+                    update_url_metadata(memgraph, url, summary, keywords, len(markdown_content))
                     
             except Exception as e:
                 logger.error(f"Error processing {url}: {str(e)}")

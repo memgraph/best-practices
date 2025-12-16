@@ -8,6 +8,7 @@ dependencies = [
     "bs4>=0.0.2",
     "httpx>=0.28.0",
     "lightrag-hku[api]==1.4.8.2",
+    "markdownify>=0.14.1",
     "neo4j>=5.28.1",
     "numpy>=1.21.0",
     "openai>=1.0.0",

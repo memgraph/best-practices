@@ -2,7 +2,7 @@
 Database operations for Memgraph insertion and querying.
 """
 import logging
-from typing import List, Dict, Any, Set
+from typing import List, Set
 
 from memgraph_toolbox.api.memgraph import Memgraph
 from models import SidebarUrl, DocumentationUrl, CypherQuery
@@ -141,79 +141,6 @@ def update_url_metadata(memgraph: Memgraph, url: str, description: str, keywords
         """)
     except Exception as e:
         logger.warning(f"Error updating URL metadata for {url}: {str(e)}")
-
-
-async def insert_url_nodes(memgraph: Memgraph, urls_metadata: List[Dict[str, Any]]):
-    """
-    Insert discovered URLs with metadata into Memgraph as Url nodes.
-    Creates a node for each URL with metadata properties (name, description, keywords).
-    Creates HAS_CONTENT_LINK relationships for content_links.
-    
-    Note: The metadata from scrape_urls uses 'summary' instead of 'description'.
-
-    Args:
-        memgraph: Memgraph database connection
-        urls_metadata: List of URL metadata dictionaries with keys: url, summary, keywords, content_links
-    """
-    if not urls_metadata:
-        return
-
-    inserted_count = 0
-    content_link_count = 0
-    
-    for url_data in urls_metadata:
-        try:
-            # Extract URL and metadata
-            if isinstance(url_data, dict):
-                url = url_data.get("url", "")
-                # scrape_urls uses 'summary' instead of 'description'
-                description = url_data.get("summary", "")
-                keywords_list = url_data.get("keywords", [])
-                # Convert keywords list to comma-separated string
-                keywords = ", ".join(keywords_list) if isinstance(keywords_list, list) else str(keywords_list)
-                content_links = url_data.get("content_links", [])
-            else:
-                url = url_data
-                description = keywords = ""
-                content_links = []
-
-            if not url:
-                continue
-
-            # Skip URLs with no metadata and no links
-            if not description and not keywords and not content_links:
-                logger.debug(f"Skipping URL with no metadata and no links: {url}")
-                continue
-
-            # Create/update URL node
-            url_escaped = _escape_cypher_string(url)
-            description_escaped = _escape_cypher_string(description)
-            keywords_escaped = _escape_cypher_string(keywords)
-            
-            memgraph.query(f"""
-                MERGE (u:Url {{name: '{url_escaped}'}})
-                SET u += {{description: '{description_escaped}', keywords: '{keywords_escaped}'}}
-            """)
-            inserted_count += 1
-
-            # Create HAS_CONTENT_LINK relationships for content_links
-            if content_links:
-                parent_escaped = url_escaped
-                for content_url in content_links:
-                    try:
-                        content_escaped = _escape_cypher_string(content_url)
-                        memgraph.query(f"""
-                            MERGE (parent:Url {{name: '{parent_escaped}'}})
-                            MERGE (content:Url {{name: '{content_escaped}'}})
-                            MERGE (parent)-[:HAS_CONTENT_LINK]->(content)
-                        """)
-                        content_link_count += 1
-                    except Exception as e:
-                        logger.warning(f"Error creating HAS_CONTENT_LINK relationship from {url} to {content_url}: {str(e)}")
-        except Exception as e:
-            logger.warning(f"Error processing URL {url_data}: {str(e)}")
-
-    logger.info(f"Inserted {inserted_count} Url nodes and {content_link_count} HAS_CONTENT_LINK relationships into Memgraph")
 
 
 async def ingest_documentation_urls(memgraph: Memgraph, documentation_urls: List[DocumentationUrl]) -> List[str]:
