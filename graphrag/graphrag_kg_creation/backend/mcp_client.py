@@ -98,10 +98,6 @@ async def initialize_mcp_session(mcp_url: str, timeout: float = 10.0) -> None:
             _mcp_initialized = True
             logger.info(f"MCP session initialized with ID: {_mcp_session_id}")
         else:
-            # Try to get session ID from error response (some servers send it even on errors)
-            if "mcp-session-id" in response.headers:
-                _mcp_session_id = response.headers["mcp-session-id"]
-            
             # Check if initialization was successful
             if response.status_code == 200:
                 _mcp_initialized = True

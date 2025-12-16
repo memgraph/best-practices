@@ -41,7 +41,8 @@ def create_vector_search_tool(mcp_server: MCPServer):
             Each result contains a node and its similarity score.
         """
         # Sanitize the question to prevent Cypher injection
-        sanitized_query = question.replace("'", "\\'").replace("\\", "\\\\")
+        # Escape backslashes first, then double quotes (since query uses double-quote delimiters)
+        sanitized_query = question.replace("\\", "\\\\").replace('"', '\\"')
 
         # Construct the vector search query exactly as specified
         cypher_query = f"""CALL embeddings.text(["{sanitized_query}"]) yield dimension, embeddings, success
@@ -248,8 +249,9 @@ def create_keyword_search_tool(mcp_server: MCPServer):
             - Each result contains: node (with all properties) and score (relevance score)
         """
         # Sanitize inputs to prevent Cypher injection
-        sanitized_property = property_name.replace("'", "").replace("\\", "").replace("`", "")
-        sanitized_term = search_term.replace("'", "\\'").replace("\\", "\\\\")
+        sanitized_property = property_name.replace("'", "").replace("\\", "").replace("`", "").replace('"', "")
+        # Escape backslashes first, then double quotes (since query uses double-quote delimiters)
+        sanitized_term = search_term.replace("\\", "\\\\").replace('"', '\\"')
         
         # Construct the keyword search query
         cypher_query = f"""CALL text_search.search_all("{sanitized_property}", "{sanitized_term}") YIELD node, score

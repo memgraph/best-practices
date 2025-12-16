@@ -278,7 +278,7 @@ async def ingest_documentation_urls(memgraph: Memgraph, documentation_urls: List
 def check_url_processed(memgraph: Memgraph, url: str) -> bool:
     """Check if a URL has already been processed."""
     try:
-        url_escaped = url.replace("'", "\\'")
+        url_escaped = escape_cypher_string(url)
         result = memgraph.query(f"MATCH (p:ProcessedUrls {{url: '{url_escaped}'}}) RETURN p LIMIT 1")
         return len(result) > 0
     except Exception as e:
@@ -289,7 +289,7 @@ def check_url_processed(memgraph: Memgraph, url: str) -> bool:
 def mark_url_processed(memgraph: Memgraph, url: str):
     """Mark a URL as processed."""
     try:
-        url_escaped = url.replace("'", "\\'")
+        url_escaped = escape_cypher_string(url)
         memgraph.query(f"MERGE (p:ProcessedUrls {{url: '{url_escaped}'}})")
         logger.debug(f"Marked URL as processed: {url}")
     except Exception as e:
