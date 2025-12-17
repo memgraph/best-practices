@@ -1,0 +1,20 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 400;
+  background: #FFFFFF;
+  min-height: 100vh;
+  padding: 20px;
+  color: #231F20;
+}
+
+#app {
+  max-width: 1200px;
+  margin: 0 auto;
+}
+

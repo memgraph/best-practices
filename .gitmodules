@@ -1,0 +1,3 @@
+[submodule "graphrag/graphrag_kg_creation/backend/ai-toolkit"]
+	path = graphrag/graphrag_kg_creation/backend/ai-toolkit
+	url = https://github.com/memgraph/ai-toolkit

@@ -1,0 +1,15 @@
+fastapi==0.109.0
+uvicorn[standard]>=0.31.1
+python-dotenv>=1.1.1
+httpx>=0.28.1
+openai-agents==0.6.1
+
+# AI Toolkit dependencies
+lightrag-hku[api]==1.4.8.2
+unstructured[all-docs]>=0.12.6
+numpy>=2.2.6
+neo4j>=5.28.1
+litellm>=1.77.1
+mcp>=1.14.1
+deepeval>=3.5.2
+

@@ -1,0 +1,13 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+lightrag_storage.out/
+.env
+*.log
+.venv/
+venv/
+ENV/
+env/
+
