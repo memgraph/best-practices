@@ -66,3 +66,4 @@ lightrag_storage.out/
 cache/
 *.log
 
+cache.json

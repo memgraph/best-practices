@@ -14,7 +14,6 @@ import sys
 import logging
 import asyncio
 from pathlib import Path
-from typing import List
 
 
 # Setup logging
@@ -45,7 +44,14 @@ from scrape_urls import (
     discover_urls,
 )
 
-from database import ingest_sidebar_elements, ingest_documentation_urls
+from database import (
+    ingest_sidebar_elements,
+    ingest_documentation_urls,
+    cache_exists,
+    load_cache,
+    import_cache_to_graph,
+    export_graph_to_cache,
+)
 from process_kg import initialize_memgraph_and_lightrag, knowledge_graph_construction
 
 
@@ -87,38 +93,61 @@ async def main():
             cleanup=args.cleanup
         )
         
-        # Step 2: Discover sidebar elements
-        logger.info("=" * 80)
-        logger.info("Step 2: Discovering sidebar elements")
-        logger.info("=" * 80)
-        sidebar_urls = await discover_sidebar_elements()
-        sidebar_urls_list = await ingest_sidebar_elements(memgraph, sidebar_urls)
+        # Check if cache exists
+        if cache_exists() and not args.cleanup:
+            logger.info("=" * 80)
+            logger.info("Cache found! Loading from cache...")
+            logger.info("=" * 80)
+            cache_data = load_cache()
+            if cache_data:
+                all_urls = import_cache_to_graph(memgraph, cache_data)
+                logger.info(f"Loaded {len(all_urls)} URLs from cache")
+            else:
+                logger.warning("Failed to load cache, falling back to scraping")
+                all_urls = []
+        else:
+            all_urls = []
         
-        # Step 3: Discover and ingest URLs from base URL
-        logger.info("=" * 80)
-        logger.info("Step 3: Discovering and ingesting URLs from base URL")
-        logger.info("=" * 80)
-        discovered_urls = await discover_urls(MEMGRAPH_DOCS_BASE_URL)
-        discovered_urls_list = await ingest_documentation_urls(memgraph, discovered_urls)
-        
-        # Combine sidebar URLs and discovered URLs
-        all_urls_set = set(sidebar_urls_list) | set(discovered_urls_list)
-        all_urls = sorted(list(all_urls_set))
-        
-        if args.max_urls:
-            all_urls = all_urls[:args.max_urls]
-            logger.info(f"Limited to {len(all_urls)} URLs for processing")
-        
+        # If no cache or cache failed, do the scraping
         if not all_urls:
-            logger.error("No URLs discovered. Exiting.")
-            return
-        
-        # Step 4: Process URL content (Cypher queries, description, keywords)
-        logger.info("=" * 80)
-        logger.info("Step 4: Processing URL content")
-        logger.info("=" * 80)
-        cypher_queries_count = await process_url_content(memgraph, all_urls)
-        logger.info(f"Extracted and stored {cypher_queries_count} Cypher queries total")
+            # Step 2: Discover sidebar elements
+            logger.info("=" * 80)
+            logger.info("Step 2: Discovering sidebar elements")
+            logger.info("=" * 80)
+            sidebar_urls = await discover_sidebar_elements()
+            sidebar_urls_list = await ingest_sidebar_elements(memgraph, sidebar_urls)
+            
+            # Step 3: Discover and ingest URLs from base URL
+            logger.info("=" * 80)
+            logger.info("Step 3: Discovering and ingesting URLs from base URL")
+            logger.info("=" * 80)
+            discovered_urls = await discover_urls(MEMGRAPH_DOCS_BASE_URL)
+            discovered_urls_list = await ingest_documentation_urls(memgraph, discovered_urls)
+            
+            # Combine sidebar URLs and discovered URLs
+            all_urls_set = set(sidebar_urls_list) | set(discovered_urls_list)
+            all_urls = sorted(list(all_urls_set))
+            
+            if args.max_urls:
+                all_urls = all_urls[:args.max_urls]
+                logger.info(f"Limited to {len(all_urls)} URLs for processing")
+            
+            if not all_urls:
+                logger.error("No URLs discovered. Exiting.")
+                return
+            
+            # Step 4: Process URL content (Cypher queries, description, keywords)
+            logger.info("=" * 80)
+            logger.info("Step 4: Processing URL content")
+            logger.info("=" * 80)
+            cypher_queries_count = await process_url_content(memgraph, all_urls)
+            logger.info(f"Extracted and stored {cypher_queries_count} Cypher queries total")
+            
+            # Step 4b: Export to cache
+            logger.info("=" * 80)
+            logger.info("Step 4b: Exporting to cache")
+            logger.info("=" * 80)
+            export_graph_to_cache(memgraph)
         
         # Step 5: Knowledge graph construction
         logger.info("=" * 80)
