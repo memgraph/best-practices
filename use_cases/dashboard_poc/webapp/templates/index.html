@@ -1,0 +1,1031 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ABSA Fraud Detection – Query Portal</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+        rel="stylesheet" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css"
+        rel="stylesheet" />
+  <link href="{{ url_for('static', filename='css/style.css') }}" rel="stylesheet" />
+</head>
+<body>
+
+<!-- ─── Navbar ──────────────────────────────────────────────────── -->
+<nav class="navbar navbar-expand-lg border-bottom">
+  <div class="container-fluid">
+    <a class="navbar-brand fw-bold" href="/">
+      <i class="bi bi-shield-exclamation text-danger me-2"></i>
+      ABSA Fraud Detection
+    </a>
+    <div class="d-flex align-items-center gap-2">
+      <button class="btn btn-sm btn-outline-secondary" onclick="loadStats()">
+        <i class="bi bi-bar-chart me-1"></i> Stats
+      </button>
+      <button class="btn btn-sm btn-outline-warning" data-bs-toggle="modal" data-bs-target="#settingsModal">
+        <i class="bi bi-gear me-1"></i> Share IDs
+      </button>
+      <a href="{{ lab_url }}" target="_blank" class="btn btn-sm btn-outline-info">
+        <i class="bi bi-diagram-3 me-1"></i> Open Lab
+      </a>
+    </div>
+  </div>
+</nav>
+
+<div class="container-fluid py-3">
+  <div class="row g-3">
+
+    <!-- ─── Left Panel ─────────────────────────────────────────── -->
+    <div class="col-lg-3 col-xl-3">
+
+      <!-- Search Card -->
+      <div class="card border-primary mb-3">
+        <div class="card-header bg-primary text-white">
+          <i class="bi bi-search me-2"></i>Account Lookup
+        </div>
+        <div class="card-body">
+          <div class="input-group mb-2">
+            <span class="input-group-text"><i class="bi bi-hash"></i></span>
+            <input type="text" id="acctNum" class="form-control"
+                   placeholder="Enter account number" />
+            <button class="btn btn-primary" onclick="searchAccount()">
+              <i class="bi bi-search"></i>
+            </button>
+          </div>
+          <div id="sampleAccounts" class="mb-2">
+            <small class="text-muted">
+              <a href="#" onclick="loadSampleAccounts(); return false;">
+                Load sample fraud accounts
+              </a>
+            </small>
+            <div id="sampleList" class="d-none mt-1"></div>
+          </div>
+          <div id="acctInfo" class="d-none"></div>
+        </div>
+      </div>
+
+      <!-- Stats Card -->
+      <div class="card mb-3" id="statsCard" style="display:none">
+        <div class="card-header"><i class="bi bi-bar-chart me-2"></i>Graph Statistics</div>
+        <div class="card-body" id="statsBody"></div>
+      </div>
+
+      <!-- ── Query Buttons (4 parameterized queries) ── -->
+      <div class="card mb-3" id="acctQueriesCard" style="display:none">
+        <div class="card-header">
+          <i class="bi bi-lightning me-2"></i>Account Queries
+        </div>
+        <div class="list-group list-group-flush" id="queryButtonsList">
+          {% for key, q in param_queries.items() %}
+          <div class="list-group-item p-2">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="fw-semibold" style="font-size:0.85rem;">
+                <i class="bi {{ q.icon }} text-{{ q.color }} me-1"></i>{{ q.title }}
+              </span>
+            </div>
+            <div class="d-flex gap-1">
+              <button class="btn btn-sm btn-outline-secondary flex-fill"
+                      onclick="runQuery('{{ key }}')" title="Table results">
+                <i class="bi bi-table me-1"></i>Table
+              </button>
+              <button class="btn btn-sm btn-outline-{{ q.color }} flex-fill"
+                      onclick="runGraphQuery('{{ key }}')" title="In-app graph visualization">
+                <i class="bi bi-share me-1"></i>Graph
+              </button>
+              <button class="btn btn-sm btn-outline-info flex-fill lab-share-btn"
+                      data-query-key="{{ key }}"
+                      onclick="openInLab('{{ key }}')" title="Open in Memgraph Lab">
+                <i class="bi bi-box-arrow-up-right me-1"></i>Lab
+              </button>
+            </div>
+          </div>
+          {% endfor %}
+        </div>
+        <div class="card-footer">
+          <small class="text-muted" id="shareIdStatus"></small>
+        </div>
+      </div>
+
+      <!-- Global Queries -->
+      <div class="card">
+        <div class="card-header">
+          <i class="bi bi-globe me-2"></i>Global Queries
+        </div>
+        <div class="list-group list-group-flush">
+          <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                  onclick="runQuery('fraud_yesterday')">
+            <span><i class="bi bi-calendar-day text-danger me-2"></i>Yesterday's Fraud</span>
+            <span class="badge bg-secondary"><i class="bi bi-play-fill"></i></span>
+          </button>
+          <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                  onclick="runQuery('fraud_confirmed_7d')">
+            <span><i class="bi bi-calendar-week text-danger me-2"></i>Fraud Confirmed (7d)</span>
+            <span class="badge bg-secondary"><i class="bi bi-play-fill"></i></span>
+          </button>
+          <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                  onclick="runQuery('phone_clusters')">
+            <span><i class="bi bi-phone text-info me-2"></i>Phone Bank Clusters</span>
+            <span class="badge bg-secondary"><i class="bi bi-play-fill"></i></span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ─── Right Panel: Results ───────────────────────────────── -->
+    <div class="col-lg-9 col-xl-9">
+
+      <!-- View Toggle Tabs -->
+      <ul class="nav nav-tabs mb-3" id="viewTabs">
+        <li class="nav-item">
+          <button class="nav-link active" id="tableTab" onclick="showView('table')">
+            <i class="bi bi-table me-1"></i>Table View
+          </button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link" id="graphTab" onclick="showView('graph')">
+            <i class="bi bi-share me-1"></i>Graph View
+          </button>
+        </li>
+        <li class="nav-item">
+          <button class="nav-link" id="labTab" onclick="showView('lab')">
+            <i class="bi bi-box-arrow-up-right me-1"></i>Lab View
+          </button>
+        </li>
+      </ul>
+
+      <!-- ── TABLE VIEW ── -->
+      <div id="tableView">
+        <div id="resultsHeader" class="d-none mb-3">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h5 class="mb-0" id="resultsTitle"></h5>
+              <small class="text-muted" id="resultsDesc"></small>
+            </div>
+            <span class="badge bg-info fs-6" id="resultsCount"></span>
+          </div>
+        </div>
+        <div id="loadingSpinner" class="text-center py-5 d-none">
+          <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Loading...</span>
+          </div>
+          <p class="mt-2 text-muted">Executing query...</p>
+        </div>
+        <div id="errorAlert" class="alert alert-danger d-none" role="alert">
+          <i class="bi bi-exclamation-octagon me-2"></i>
+          <span id="errorText"></span>
+        </div>
+        <div id="resultsTableContainer" class="d-none">
+          <div class="table-responsive">
+            <table class="table table-sm table-hover" id="resultsTable">
+              <thead id="resultsTableHead"></thead>
+              <tbody id="resultsTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="emptyState" class="text-center py-5">
+          <i class="bi bi-search display-1 text-muted"></i>
+          <h4 class="text-muted mt-3">Enter an account number to get started</h4>
+          <p class="text-muted">
+            Search for an account, then use <strong>Table</strong>, <strong>Graph</strong>,
+            or <strong>Lab</strong> to explore results.
+          </p>
+        </div>
+      </div>
+
+      <!-- ── GRAPH VIEW (Orb in-app) ── -->
+      <div id="graphView" class="d-none">
+        <!-- Graph header bar -->
+        <div id="graphHeader" class="d-none mb-2">
+          <div class="d-flex justify-content-between align-items-center">
+            <div>
+              <h5 class="mb-0" id="graphTitle"></h5>
+              <small class="text-muted" id="graphDesc"></small>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+              <span class="badge bg-secondary" id="graphNodeCount"></span>
+              <span class="badge bg-secondary" id="graphEdgeCount"></span>
+              <button class="btn btn-sm btn-outline-secondary" onclick="orbRecenter()" title="Recenter graph">
+                <i class="bi bi-arrows-fullscreen"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Loading overlay -->
+        <div id="graphLoading" class="graph-loading-overlay d-none">
+          <div class="text-center">
+            <div class="spinner-border text-primary mb-3" style="width:3rem;height:3rem;" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+            <h5 class="text-muted">Loading graph data...</h5>
+            <p class="text-muted small">Running query against Memgraph</p>
+          </div>
+        </div>
+
+        <!-- Error -->
+        <div id="graphError" class="alert alert-danger d-none mx-3" role="alert">
+          <i class="bi bi-exclamation-octagon me-2"></i>
+          <span id="graphErrorText"></span>
+        </div>
+
+        <!-- Graph + Properties side-by-side (panel always reserves space) -->
+        <div class="d-flex gap-2" id="graphRow">
+          <div class="flex-grow-1 min-width-0" id="graphCol">
+            <div id="orbContainer" class="orb-container"></div>
+          </div>
+          <!-- Properties panel (always present, content hidden until click) -->
+          <div id="propsCol" style="width:320px; flex-shrink:0;">
+            <div class="card props-panel" id="propsCard" style="visibility:hidden;">
+              <div class="card-header d-flex justify-content-between align-items-center py-1 px-2">
+                <span class="fw-semibold" style="font-size:0.85rem;" id="propsTitle">
+                  <i class="bi bi-info-circle me-1"></i>Properties
+                </span>
+                <button class="btn btn-sm btn-link text-muted p-0" onclick="closePropsPanel()" title="Close">
+                  <i class="bi bi-x-lg"></i>
+                </button>
+              </div>
+              <div class="card-body p-0" id="propsBody">
+                <table class="table table-sm table-borderless mb-0 props-table">
+                  <tbody id="propsTableBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Empty state for graph -->
+        <div id="graphEmpty" class="text-center py-5">
+          <i class="bi bi-share display-1 text-muted"></i>
+          <h4 class="text-muted mt-3">In-App Graph Visualization</h4>
+          <p class="text-muted">Click a <strong>"Graph"</strong> button to render results here using Orb.</p>
+        </div>
+
+        <!-- Legend with bank icons -->
+        <div id="graphLegend" class="d-none mt-2">
+          <div class="d-flex flex-wrap gap-3 px-2 align-items-center" style="font-size:0.8rem;">
+            <span class="text-muted fw-semibold me-1">Banks:</span>
+            <span class="d-inline-flex align-items-center gap-1"><img src="/static/img/banks/absa.png" class="legend-icon"/> ABSA</span>
+            <span class="d-inline-flex align-items-center gap-1"><img src="/static/img/banks/fnb.png" class="legend-icon"/> FNB</span>
+            <span class="d-inline-flex align-items-center gap-1"><img src="/static/img/banks/standard_bank.png" class="legend-icon"/> Standard Bank</span>
+            <span class="d-inline-flex align-items-center gap-1"><img src="/static/img/banks/nedbank.png" class="legend-icon"/> Nedbank</span>
+            <span class="d-inline-flex align-items-center gap-1"><img src="/static/img/banks/capitec.png" class="legend-icon"/> Capitec</span>
+            <span class="d-inline-flex align-items-center gap-1"><img src="/static/img/banks/investec.png" class="legend-icon"/> Investec</span>
+            <span class="d-inline-flex align-items-center gap-1"><img src="/static/img/banks/african_bank.png" class="legend-icon"/> African Bank</span>
+            <span class="d-inline-flex align-items-center gap-1"><img src="/static/img/banks/tymebank.png" class="legend-icon"/> TymeBank</span>
+            <span class="d-inline-flex align-items-center gap-1"><img src="/static/img/banks/discovery_bank.png" class="legend-icon"/> Discovery</span>
+            <span class="ms-2 text-muted fw-semibold">|</span>
+            <span class="d-inline-flex align-items-center gap-1"><span class="legend-dot" style="background:#ffa657;border:2px solid #ffa657;box-shadow:0 0 6px #ffa657;"></span> Target</span>
+            <span><span class="legend-line" style="background:#da3633;"></span> Fraud</span>
+            <span><span class="legend-line" style="background:#6e7681;"></span> Normal</span>
+            <span class="ms-2 text-muted">Node size = connection count</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── LAB VIEW ── -->
+      <div id="labView" class="d-none">
+        <div id="labPlaceholder" class="text-center py-5">
+          <i class="bi bi-box-arrow-up-right display-1 text-muted"></i>
+          <h4 class="text-muted mt-3">Memgraph Lab View</h4>
+          <p class="text-muted">Click a <strong>"Lab"</strong> button to open the query in Memgraph Lab for advanced exploration.</p>
+          <div id="noShareIdWarning" class="alert alert-warning d-none mt-3" style="max-width:600px; margin:0 auto;">
+            <i class="bi bi-exclamation-triangle me-2"></i>
+            <strong>Share IDs not configured.</strong> Click
+            <a href="#" data-bs-toggle="modal" data-bs-target="#settingsModal">Share IDs</a>
+            in the navbar to set them up.
+          </div>
+        </div>
+        <div id="labOpenedPanel" class="d-none">
+          <div class="card" style="max-width:700px; margin:2rem auto;">
+            <div class="card-body text-center py-4">
+              <i class="bi bi-box-arrow-up-right display-4 text-info"></i>
+              <h4 class="mt-3" id="labOpenedTitle"></h4>
+              <p class="text-muted" id="labOpenedDesc"></p>
+              <div class="d-flex justify-content-center gap-2 mt-3">
+                <a href="#" id="labOpenedLink" target="_blank" class="btn btn-info">
+                  <i class="bi bi-box-arrow-up-right me-1"></i>Open Lab Again
+                </a>
+                <button class="btn btn-outline-secondary" onclick="showView('graph')">
+                  <i class="bi bi-share me-1"></i>Switch to Graph
+                </button>
+              </div>
+              <div class="mt-3">
+                <small class="text-muted">Lab URL:</small><br>
+                <code id="labOpenedUrl" class="small user-select-all"></code>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<!-- ─── Settings Modal ──────────────────────────────────────────── -->
+<div class="modal fade" id="settingsModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title"><i class="bi bi-gear me-2"></i>Configure Query Share IDs</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="alert alert-info">
+          <i class="bi bi-info-circle me-2"></i>
+          <strong>How to get Share IDs:</strong>
+          <ol class="mb-0 mt-2">
+            <li>Open <a href="{{ lab_url }}" target="_blank">Memgraph Lab</a> and connect to the database</li>
+            <li>Paste a parameterized query (see below) into the query editor</li>
+            <li>In the <strong>Parameters</strong> panel, add: <code>acct_num</code> = <code>"9968748174"</code></li>
+            <li>Run the query to verify it works, then switch to <strong>Graph</strong> view</li>
+            <li>Click the <strong>Share</strong> button (Enterprise feature)</li>
+            <li>Copy the <strong>shareId</strong> from the generated URL</li>
+            <li>Paste it below</li>
+          </ol>
+        </div>
+
+        {% for key, q in param_queries.items() %}
+        <div class="card mb-3">
+          <div class="card-header d-flex justify-content-between align-items-center">
+            <span><i class="bi {{ q.icon }} text-{{ q.color }} me-2"></i>{{ q.title }}</span>
+            <button class="btn btn-sm btn-outline-secondary" onclick="copyQuery('{{ key }}')">
+              <i class="bi bi-clipboard me-1"></i>Copy Query
+            </button>
+          </div>
+          <div class="card-body">
+            <pre class="bg-dark text-light p-2 rounded mb-2" style="font-size:0.8rem; max-height:120px; overflow:auto;" id="queryText_{{ key }}">{{ q.lab_query }}</pre>
+            <div class="input-group">
+              <span class="input-group-text">Share ID</span>
+              <input type="text" class="form-control share-id-input"
+                     id="shareId_{{ key }}" data-key="{{ key }}"
+                     placeholder="Paste the shareId here (e.g., abc123-def456-...)" />
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      <div class="modal-footer d-flex justify-content-between">
+        <button type="button" class="btn btn-outline-danger btn-sm" onclick="clearShareIds()">
+          <i class="bi bi-trash me-1"></i>Clear All
+        </button>
+        <div class="d-flex gap-2">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="button" class="btn btn-primary" onclick="saveShareIds()">
+            <i class="bi bi-check-lg me-1"></i>Save Share IDs
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://unpkg.com/@memgraph/orb@0.4.3/dist/browser/orb.min.js"></script>
+<script>
+  const LAB_URL = {{ lab_url | tojson }};
+  const PARAM_QUERY_KEYS = {{ param_queries.keys() | list | tojson }};
+
+  /* ── Orb instance ───────────────────────────────────────────── */
+
+  let orbInstance = null;
+
+  /* ── Share ID Management (localStorage) ────────────────────── */
+
+  function getShareIds() {
+    try {
+      const raw = JSON.parse(localStorage.getItem('labShareIds') || '{}');
+      const cleaned = {};
+      let needsSave = false;
+      for (const [k, v] of Object.entries(raw)) {
+        const id = extractShareId(v);
+        cleaned[k] = id;
+        if (id !== v) needsSave = true;
+      }
+      if (needsSave) localStorage.setItem('labShareIds', JSON.stringify(cleaned));
+      return cleaned;
+    } catch { return {}; }
+  }
+
+  function extractShareId(input) {
+    const val = input.trim();
+    if (!val) return '';
+    try {
+      const url = new URL(val);
+      const id = url.searchParams.get('shareId');
+      if (id) return id;
+    } catch {}
+    return val;
+  }
+
+  function saveShareIds() {
+    const ids = {};
+    document.querySelectorAll('.share-id-input').forEach(input => {
+      const key = input.dataset.key;
+      const raw = input.value.trim();
+      const id = extractShareId(raw);
+      if (id) {
+        ids[key] = id;
+        input.value = id;
+      }
+    });
+    localStorage.setItem('labShareIds', JSON.stringify(ids));
+    updateShareIdStatus();
+    bootstrap.Modal.getInstance(document.getElementById('settingsModal')).hide();
+  }
+
+  function loadShareIdsIntoModal() {
+    const ids = getShareIds();
+    document.querySelectorAll('.share-id-input').forEach(input => {
+      input.value = ids[input.dataset.key] || '';
+    });
+  }
+
+  function clearShareIds() {
+    localStorage.removeItem('labShareIds');
+    document.querySelectorAll('.share-id-input').forEach(input => { input.value = ''; });
+    updateShareIdStatus();
+  }
+
+  function updateShareIdStatus() {
+    const ids = getShareIds();
+    const configured = PARAM_QUERY_KEYS.filter(k => ids[k]);
+    const statusEl = document.getElementById('shareIdStatus');
+    if (configured.length === 0) {
+      statusEl.innerHTML = '<i class="bi bi-exclamation-triangle text-warning me-1"></i>No Lab share IDs configured. <a href="#" data-bs-toggle="modal" data-bs-target="#settingsModal">Configure</a>';
+    } else {
+      statusEl.innerHTML = `<i class="bi bi-check-circle text-success me-1"></i>${configured.length}/${PARAM_QUERY_KEYS.length} Lab share IDs configured`;
+    }
+    document.querySelectorAll('.lab-share-btn').forEach(btn => {
+      const key = btn.dataset.queryKey;
+      if (ids[key]) {
+        btn.classList.remove('btn-outline-secondary');
+        btn.classList.add('btn-outline-info');
+        btn.disabled = false;
+        btn.title = 'Open in Memgraph Lab';
+      } else {
+        btn.classList.remove('btn-outline-info');
+        btn.classList.add('btn-outline-secondary');
+        btn.title = 'Share ID not configured';
+      }
+    });
+  }
+
+  /* ── Helpers ────────────────────────────────────────────────── */
+
+  function getAcctNum() {
+    return document.getElementById('acctNum').value.trim();
+  }
+  function show(id)  { document.getElementById(id).classList.remove('d-none'); }
+  function hide(id)  { document.getElementById(id).classList.add('d-none'); }
+  function showEl(el) { el.style.display = ''; }
+  function hideEl(el) { el.style.display = 'none'; }
+
+  /* ── View Toggle ───────────────────────────────────────────── */
+
+  function showView(view) {
+    // Hide all views
+    hide('tableView');
+    hide('graphView');
+    hide('labView');
+    document.getElementById('tableTab').classList.remove('active');
+    document.getElementById('graphTab').classList.remove('active');
+    document.getElementById('labTab').classList.remove('active');
+
+    if (view === 'table') {
+      show('tableView');
+      document.getElementById('tableTab').classList.add('active');
+    } else if (view === 'graph') {
+      show('graphView');
+      document.getElementById('graphTab').classList.add('active');
+    } else if (view === 'lab') {
+      show('labView');
+      document.getElementById('labTab').classList.add('active');
+      const ids = getShareIds();
+      const hasAny = PARAM_QUERY_KEYS.some(k => ids[k]);
+      if (!hasAny) show('noShareIdWarning');
+      else hide('noShareIdWarning');
+    }
+  }
+
+  /* ── Search Account ─────────────────────────────────────────── */
+
+  async function searchAccount() {
+    const acctNum = getAcctNum();
+    if (!acctNum) return;
+
+    showEl(document.getElementById('acctQueriesCard'));
+    updateShareIdStatus();
+
+    try {
+      const resp = await fetch(`/api/query/account_info?acct_num=${encodeURIComponent(acctNum)}`);
+      const data = await resp.json();
+      const infoDiv = document.getElementById('acctInfo');
+
+      if (data.error) {
+        infoDiv.innerHTML = `<div class="alert alert-warning py-2">${data.error}</div>`;
+      } else if (data.rows.length === 0) {
+        infoDiv.innerHTML = `<div class="alert alert-warning py-2">Account not found</div>`;
+      } else {
+        const a = data.rows[0];
+        const sabricBadge = a.is_sabric_scam
+          ? '<span class="badge bg-warning ms-2">SABRIC</span>' : '';
+        const scamBadge = a.is_scam_acct
+          ? '<span class="badge bg-danger ms-1">SCAM</span>' : '';
+        const cleanBadge = (!a.is_sabric_scam && !a.is_scam_acct)
+          ? '<span class="badge bg-success ms-2">Clean</span>' : '';
+
+        infoDiv.innerHTML = `
+          <div class="mb-2">
+            <strong>${a.cust_name || 'N/A'}</strong> ${cleanBadge}${sabricBadge}${scamBadge}
+          </div>
+          <table class="table table-sm table-borderless mb-0" style="font-size: 0.8rem;">
+            <tr><td class="text-muted">Account</td><td><code>${a.acct_num}</code></td></tr>
+            <tr><td class="text-muted">Bank</td><td>${a.bank || 'N/A'}</td></tr>
+            <tr><td class="text-muted">Status</td><td>${a.status || 'N/A'}</td></tr>
+            <tr><td class="text-muted">Phone</td><td>${a.phone || 'N/A'}</td></tr>
+            <tr><td class="text-muted">In / Out</td><td>${a.in_degree} / ${a.out_degree}</td></tr>
+            ${a.sabric_case_num ? `<tr><td class="text-muted">SABRIC</td><td>${a.sabric_case_num}</td></tr>` : ''}
+          </table>
+        `;
+      }
+      show('acctInfo');
+    } catch (e) {
+      console.error(e);
+    }
+  }
+
+  /* ── Open in Memgraph Lab ──────────────────────────────────── */
+
+  function openInLab(queryKey) {
+    const acctNum = getAcctNum();
+    if (!acctNum) {
+      alert('Please enter an account number first.');
+      return;
+    }
+
+    const ids = getShareIds();
+    const shareId = ids[queryKey];
+
+    if (!shareId) {
+      const modal = new bootstrap.Modal(document.getElementById('settingsModal'));
+      loadShareIdsIntoModal();
+      modal.show();
+      return;
+    }
+
+    const labUrl = `${LAB_URL}/login?shareId=${shareId}&host=memgraph&port=7687&databaseName=memgraph&wsPort=7444&isEncrypted=false&isRouted=false&shareParams=acct_num:${acctNum}`;
+
+    const a = document.createElement('a');
+    a.href = labUrl;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+
+    showView('lab');
+    const queryTitles = {{ param_queries | tojson }};
+    document.getElementById('labOpenedTitle').textContent =
+      `${queryTitles[queryKey].title} opened in Memgraph Lab`;
+    document.getElementById('labOpenedDesc').textContent =
+      `Account: ${acctNum} — The query has been opened in a new browser tab with graph rendering.`;
+    document.getElementById('labOpenedLink').href = labUrl;
+    document.getElementById('labOpenedUrl').textContent = labUrl;
+    hide('labPlaceholder');
+    show('labOpenedPanel');
+  }
+
+  /* ── Run Query (Table View) ────────────────────────────────── */
+
+  async function runQuery(queryKey) {
+    const acctNum = getAcctNum();
+    showView('table');
+
+    hide('emptyState');
+    hide('errorAlert');
+    hide('resultsTableContainer');
+    hide('resultsHeader');
+    show('loadingSpinner');
+
+    try {
+      const url = `/api/query/${queryKey}?acct_num=${encodeURIComponent(acctNum)}`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+
+      hide('loadingSpinner');
+
+      if (data.error) {
+        document.getElementById('errorText').textContent = data.error;
+        show('errorAlert');
+        return;
+      }
+
+      document.getElementById('resultsTitle').textContent = data.title;
+      document.getElementById('resultsDesc').textContent = data.description || '';
+      document.getElementById('resultsCount').textContent = `${data.row_count} row(s)`;
+      show('resultsHeader');
+
+      if (data.rows.length === 0) {
+        document.getElementById('errorText').textContent = 'No results found.';
+        show('errorAlert');
+        return;
+      }
+
+      const keys = Object.keys(data.rows[0]);
+      const thead = document.getElementById('resultsTableHead');
+      thead.innerHTML = '<tr>' + keys.map(k =>
+        `<th class="text-nowrap">${k.replace(/_/g, ' ')}</th>`
+      ).join('') + '</tr>';
+
+      const tbody = document.getElementById('resultsTableBody');
+      tbody.innerHTML = data.rows.map(row => {
+        const cells = keys.map(k => {
+          let val = row[k];
+          if (k.toLowerCase().includes('fraud') && val === true) {
+            return `<td><span class="badge bg-danger">true</span></td>`;
+          }
+          if (Array.isArray(val)) {
+            if (val.length > 10) {
+              return `<td><span class="badge bg-info">${val.length} items</span>
+                      <details><summary class="small">Show</summary>
+                      <div class="small" style="max-height:200px;overflow:auto;">${val.join(', ')}</div></details></td>`;
+            }
+            return `<td>${val.join(', ')}</td>`;
+          }
+          if (val === null || val === undefined) return '<td class="text-muted">—</td>';
+          if (k.toLowerCase().includes('acc') && /^\d{10}$/.test(String(val))) {
+            return `<td><a href="#" class="acct-link" onclick="quickLookup('${val}'); return false;">${val}</a></td>`;
+          }
+          return `<td>${val}</td>`;
+        }).join('');
+        return `<tr>${cells}</tr>`;
+      }).join('');
+
+      show('resultsTableContainer');
+    } catch (e) {
+      hide('loadingSpinner');
+      document.getElementById('errorText').textContent = e.message;
+      show('errorAlert');
+    }
+  }
+
+  /* ── Run Graph Query (Orb Visualization) ────────────────────── */
+
+  async function runGraphQuery(queryKey) {
+    const acctNum = getAcctNum();
+    if (!acctNum) {
+      alert('Please enter an account number first.');
+      return;
+    }
+
+    showView('graph');
+    hide('graphEmpty');
+    hide('graphError');
+    hide('graphHeader');
+    hide('graphLegend');
+    show('graphLoading');
+    document.getElementById('orbContainer').innerHTML = '';
+
+    try {
+      const url = `/api/graph/${queryKey}?acct_num=${encodeURIComponent(acctNum)}`;
+      const resp = await fetch(url);
+      const data = await resp.json();
+
+      hide('graphLoading');
+
+      if (data.error) {
+        document.getElementById('graphErrorText').textContent = data.error;
+        show('graphError');
+        return;
+      }
+
+      if (data.node_count === 0) {
+        document.getElementById('graphErrorText').textContent = 'No graph results found for this account.';
+        show('graphError');
+        return;
+      }
+
+      // Show header
+      document.getElementById('graphTitle').textContent = data.title;
+      document.getElementById('graphDesc').textContent = `Account: ${acctNum}`;
+      document.getElementById('graphNodeCount').textContent = `${data.node_count} nodes`;
+      document.getElementById('graphEdgeCount').textContent = `${data.edge_count} edges`;
+      show('graphHeader');
+      show('graphLegend');
+
+      renderOrb(data.nodes, data.edges, acctNum);
+
+    } catch (e) {
+      hide('graphLoading');
+      document.getElementById('graphErrorText').textContent = e.message;
+      show('graphError');
+    }
+  }
+
+  /* ── Bank Color & Icon Config ─────────────────────────────── */
+
+  const BANK_CONFIG = {
+    'ABSA':           { color: '#AF1F2D', icon: '/static/img/banks/absa.png', border: '#8B1824' },
+    'FNB':            { color: '#009B8D', icon: '/static/img/banks/fnb.png', border: '#007A6F' },
+    'Standard Bank':  { color: '#0033A0', icon: '/static/img/banks/standard_bank.png', border: '#002880' },
+    'Nedbank':        { color: '#009639', icon: '/static/img/banks/nedbank.png', border: '#00762D' },
+    'Capitec':        { color: '#006AA4', icon: '/static/img/banks/capitec.png', border: '#004D7A' },
+    'Investec':       { color: '#003B5C', icon: '/static/img/banks/investec.png', border: '#002D47' },
+    'African Bank':   { color: '#E87722', icon: '/static/img/banks/african_bank.png', border: '#C5601A' },
+    'TymeBank':       { color: '#00AF50', icon: '/static/img/banks/tymebank.png', border: '#008A3E' },
+    'Discovery Bank': { color: '#1A1A5E', icon: '/static/img/banks/discovery_bank.png', border: '#12124A' },
+    'phone':          { color: '#6e7681', icon: '/static/img/banks/phone.png', border: '#555D66' },
+  };
+  const DEFAULT_BANK = { color: '#58a6ff', icon: '/static/img/banks/default.png', border: '#388bfd' };
+
+  function getBankConfig(bank) {
+    return BANK_CONFIG[bank] || DEFAULT_BANK;
+  }
+
+  /* ── Degree Calculation ─────────────────────────────────────── */
+
+  function computeDegrees(nodes, edges) {
+    const deg = {};
+    for (const n of nodes) deg[n.id] = 0;
+    for (const e of edges) {
+      if (e.start in deg) deg[e.start]++;
+      if (e.end in deg) deg[e.end]++;
+    }
+    return deg;
+  }
+
+  function degreeToSize(degree, isTarget) {
+    if (isTarget) return Math.max(12, Math.min(20, 12 + degree * 0.3));
+    return Math.max(5, Math.min(16, 5 + degree * 0.4));
+  }
+
+  /* ── Properties Panel ────────────────────────────────────────── */
+
+  function showNodeProps(nodeData) {
+    const title = document.getElementById('propsTitle');
+    title.innerHTML = `<i class="bi bi-person-circle me-1"></i>Account: ${nodeData.acct_num}`;
+
+    const rows = [
+      ['Account #', nodeData.acct_num],
+      ['Name', nodeData.cust_name],
+      ['Bank', nodeData.bank],
+      ['Status', nodeData.acct_status_code],
+      ['Sector', nodeData.sector_code],
+      ['Phone', nodeData.cust_phone_number],
+      ['Customer Key', nodeData.customer_key],
+      ['Opened', nodeData.acct_open_date ? nodeData.acct_open_date.substring(0, 10) : ''],
+      ['SABRIC Scam', nodeData.is_sabric_scam ? '<span class="badge bg-danger">Yes</span>' : 'No'],
+      ['Scam Account', nodeData.is_scam_acct ? '<span class="badge bg-danger">Yes</span>' : 'No'],
+      ['SABRIC Case', nodeData.sabric_case_num],
+      ['SABRIC Desc', nodeData.sabric_desc],
+    ];
+
+    renderPropsTable(rows);
+    document.getElementById('propsCard').style.visibility = 'visible';
+  }
+
+  function showEdgeProps(edgeData) {
+    const title = document.getElementById('propsTitle');
+    const fraudTag = edgeData.fraud ? ' <span class="badge bg-danger">FRAUD</span>' : '';
+    title.innerHTML = `<i class="bi bi-arrow-right-circle me-1"></i>Transfer${fraudTag}`;
+
+    const amt = edgeData.txn_amt != null
+      ? `R ${Number(edgeData.txn_amt).toLocaleString(undefined, {minimumFractionDigits: 2})}`
+      : '';
+
+    const rows = [
+      ['Transaction ID', edgeData.txn_id],
+      ['Amount', amt],
+      ['Type', edgeData.txn_type_desc || edgeData.txn_type],
+      ['Channel', edgeData.channel_desc || edgeData.channel],
+      ['Timestamp', edgeData.timestamp ? edgeData.timestamp.substring(0, 19).replace('T', ' ') : ''],
+      ['Fraud', edgeData.fraud ? '<span class="badge bg-danger">Yes</span>' : 'No'],
+      ['Fraud Identified', edgeData.fraud_date_identified ? edgeData.fraud_date_identified.substring(0, 19).replace('T', ' ') : ''],
+      ['Matched Rule', edgeData.matched_rule],
+      ['Debit Acct', edgeData.dbt_acct_num],
+      ['Credit Acct', edgeData.crd_acct_num],
+    ];
+
+    renderPropsTable(rows);
+    document.getElementById('propsCard').style.visibility = 'visible';
+  }
+
+  function renderPropsTable(rows) {
+    const tbody = document.getElementById('propsTableBody');
+    tbody.innerHTML = rows
+      .filter(([, v]) => v !== '' && v !== null && v !== undefined)
+      .map(([label, value]) =>
+        `<tr><td class="text-muted text-nowrap pe-2">${label}</td><td>${value}</td></tr>`
+      ).join('');
+  }
+
+  function closePropsPanel() {
+    document.getElementById('propsCard').style.visibility = 'hidden';
+  }
+
+  /* ── Orb Rendering ──────────────────────────────────────────── */
+
+  function renderOrb(nodes, edges, targetAcct) {
+    const container = document.getElementById('orbContainer');
+    container.innerHTML = '';
+    closePropsPanel();
+
+    // Compute degrees for sizing
+    const degrees = computeDegrees(nodes, edges);
+
+    // Build Orb node data (include all properties for the panel)
+    const orbNodes = nodes.map(n => ({ ...n }));
+    const orbEdges = edges.map(e => ({ ...e }));
+
+    // Create Orb instance
+    const orb = new Orb.Orb(container);
+    orbInstance = orb;
+
+    // Set default styles with bank icons + degree sizing
+    orb.data.setDefaultStyle({
+      getNodeStyle(node) {
+        const d = node.data;
+        const bank = d.bank || '';
+        const isTarget = d.is_target || false;
+        const deg = degrees[d.id] || 0;
+        const size = degreeToSize(deg, isTarget);
+        const cfg = getBankConfig(bank);
+
+        return {
+          ...node.style,
+          imageUrl: cfg.icon,
+          size: size,
+          borderWidth: isTarget ? 3 : 0.6,
+          borderColor: isTarget ? '#ffa657' : cfg.border,
+          fontSize: 3.5,
+          fontColor: '#c9d1d9',
+          label: d.acct_num || '',
+        };
+      },
+      getEdgeStyle(edge) {
+        const isFraud = edge.data.fraud;
+        const amt = edge.data.txn_amt;
+        const label = amt != null ? 'R ' + Number(amt).toLocaleString(undefined, {maximumFractionDigits: 0}) : '';
+        return {
+          ...edge.style,
+          color: isFraud ? '#da3633' : '#6e7681',
+          width: isFraud ? 0.8 : 0.3,
+          label: label,
+          fontSize: isFraud ? 3 : 2,
+          fontColor: isFraud ? '#f85149' : '#8b949e',
+          fontFamily: 'Arial, sans-serif',
+          arrowSize: 1,
+        };
+      },
+    });
+
+    // Setup data
+    orb.data.setup({ nodes: orbNodes, edges: orbEdges });
+
+    // Rendering settings – shadows off for performance, labels on
+    const nodeCount = orbNodes.length;
+    const showLabels = nodeCount <= 200;
+    orb.view.setSettings({
+      render: {
+        labelsIsEnabled: showLabels,
+        labelsOnEventIsEnabled: true,
+        shadowIsEnabled: false,
+        shadowOnEventIsEnabled: false,
+        contextAlphaOnEventIsEnabled: true,
+        contextAlphaOnEvent: 0.3,
+      },
+      isOutOfBoundsDragEnabled: true,
+      areCoordinatesRounded: true,
+    });
+
+    // Render with animated simulation (nice initial layout)
+    orb.view.render(() => {
+      orb.view.recenter();
+    });
+
+    // ── Events ──
+
+    // Smooth dragging: hide labels on first move, repaint each step, restore on end
+    let labelsHidden = false;
+    orb.events.on(Orb.OrbEventType.NODE_DRAG, () => {
+      if (!labelsHidden) {
+        labelsHidden = true;
+        orb.view.setSettings({ render: { labelsIsEnabled: false } });
+      }
+      orb.view.render();
+    });
+    orb.events.on(Orb.OrbEventType.NODE_DRAG_END, () => {
+      if (labelsHidden) {
+        labelsHidden = false;
+        orb.view.setSettings({ render: { labelsIsEnabled: showLabels } });
+        orb.view.render();
+      }
+    });
+
+    // Node click → show properties panel
+    orb.events.on(Orb.OrbEventType.NODE_CLICK, (event) => {
+      if (event.node) {
+        showNodeProps(event.node.data);
+      }
+    });
+
+    // Edge click → show properties panel
+    orb.events.on(Orb.OrbEventType.EDGE_CLICK, (event) => {
+      if (event.edge) {
+        showEdgeProps(event.edge.data);
+      }
+    });
+
+  }
+
+  function orbRecenter() {
+    if (orbInstance) {
+      orbInstance.view.recenter();
+    }
+  }
+
+  /* ── Quick Lookup ──────────────────────────────────────────── */
+
+  function quickLookup(acctNum) {
+    document.getElementById('acctNum').value = acctNum;
+    searchAccount();
+  }
+
+  /* ── Load Sample Fraud Accounts ────────────────────────────── */
+
+  async function loadSampleAccounts() {
+    const listDiv = document.getElementById('sampleList');
+    listDiv.innerHTML = '<div class="spinner-border spinner-border-sm"></div>';
+    show('sampleList');
+    try {
+      const resp = await fetch('/api/sample-fraud-accounts');
+      const data = await resp.json();
+      listDiv.innerHTML = data.accounts.map(a =>
+        `<a href="#" class="badge bg-danger me-1 mb-1 text-decoration-none"
+            onclick="quickLookup('${a}'); return false;">${a}</a>`
+      ).join('');
+    } catch (e) {
+      listDiv.innerHTML = `<small class="text-danger">${e.message}</small>`;
+    }
+  }
+
+  /* ── Copy Query to Clipboard ───────────────────────────────── */
+
+  function copyQuery(key) {
+    const text = document.getElementById(`queryText_${key}`).textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      const btn = event.target.closest('button');
+      const origHTML = btn.innerHTML;
+      btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Copied!';
+      btn.classList.add('btn-success');
+      btn.classList.remove('btn-outline-secondary');
+      setTimeout(() => {
+        btn.innerHTML = origHTML;
+        btn.classList.remove('btn-success');
+        btn.classList.add('btn-outline-secondary');
+      }, 1500);
+    });
+  }
+
+  /* ── Stats ──────────────────────────────────────────────────── */
+
+  async function loadStats() {
+    const card = document.getElementById('statsCard');
+    showEl(card);
+    const body = document.getElementById('statsBody');
+    body.innerHTML = '<div class="text-center"><div class="spinner-border spinner-border-sm"></div></div>';
+    try {
+      const resp = await fetch('/api/stats');
+      const data = await resp.json();
+      body.innerHTML = `
+        <table class="table table-sm table-borderless mb-0">
+          <tr><td class="text-muted">Accounts</td><td class="text-end fw-bold">${(data.total_accounts || 0).toLocaleString()}</td></tr>
+          <tr><td class="text-muted">Transfers</td><td class="text-end fw-bold">${(data.total_transfers || 0).toLocaleString()}</td></tr>
+          <tr><td class="text-muted">Fraud Txns</td><td class="text-end fw-bold text-danger">${(data.fraud_transfers || 0).toLocaleString()}</td></tr>
+        </table>
+      `;
+    } catch (e) {
+      body.innerHTML = `<div class="alert alert-warning">${e.message}</div>`;
+    }
+  }
+
+  /* ── Init ───────────────────────────────────────────────────── */
+
+  document.getElementById('settingsModal').addEventListener('show.bs.modal', loadShareIdsIntoModal);
+
+  document.getElementById('acctNum').addEventListener('keydown', e => {
+    if (e.key === 'Enter') searchAccount();
+  });
+
+  document.querySelectorAll('.share-id-input').forEach(input => {
+    input.addEventListener('paste', e => {
+      setTimeout(() => { input.value = extractShareId(input.value); }, 0);
+    });
+  });
+
+  updateShareIdStatus();
+</script>
+</body>
+</html>

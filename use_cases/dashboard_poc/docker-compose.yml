@@ -1,0 +1,103 @@
+services:
+  # ─────────────────────────────────────────────
+  # Memgraph MAGE – main graph database
+  # ─────────────────────────────────────────────
+  memgraph:
+    image: memgraph/memgraph-mage:latest
+    ports:
+      - "7687:7687"   # Bolt protocol
+      - "7444:7444"   # Log streaming
+    environment:
+      - MEMGRAPH_ENTERPRISE_LICENSE=${MG_ENTERPRISE_LICENSE:-}
+      - MEMGRAPH_ORGANIZATION_NAME=${MG_ORGANIZATION_NAME:-}
+    command:
+      [
+        "--log-level=WARNING",
+        "--memory-limit=20480",
+        "--storage-parallel-schema-recovery=true",
+        "--also-log-to-stderr",
+      ]
+    volumes:
+      - memgraph-data:/var/lib/memgraph
+    networks:
+      - memgraph-net
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'RETURN 1;' | mgconsole || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  # ─────────────────────────────────────────────
+  # Memgraph – remote storage for Lab sharing
+  # (Enterprise-only: required for query/GSS
+  #  sharing features in Memgraph Lab)
+  # ─────────────────────────────────────────────
+  memgraph-storage:
+    image: memgraph/memgraph:latest
+    ports:
+      - "7688:7687"
+    environment:
+      - MEMGRAPH_ENTERPRISE_LICENSE=${MG_ENTERPRISE_LICENSE:-}
+      - MEMGRAPH_ORGANIZATION_NAME=${MG_ORGANIZATION_NAME:-}
+    command: ["--log-level=WARNING"]
+    volumes:
+      - memgraph-storage-data:/var/lib/memgraph
+    networks:
+      - memgraph-net
+    healthcheck:
+      test: ["CMD-SHELL", "echo 'RETURN 1;' | mgconsole || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+  # ─────────────────────────────────────────────
+  # Memgraph Lab – visual query interface
+  # ─────────────────────────────────────────────
+  memgraph-lab:
+    image: memgraph/lab:3.8.0
+    ports:
+      - "3000:3000"
+    environment:
+      # Quick-connect to the main Memgraph instance
+      - QUICK_CONNECT_MG_HOST=memgraph
+      - QUICK_CONNECT_MG_PORT=7687
+      # Enterprise license for Lab (sharing features)
+      - ENTERPRISE_LICENSE_ORG_NAME=${MG_ORGANIZATION_NAME:-}
+      - ENTERPRISE_LICENSE_KEY=${MG_ENTERPRISE_LICENSE:-}
+      # Remote storage connection (for query & GSS sharing)
+      - STORAGE_MG_HOST=memgraph-storage
+      - STORAGE_MG_PORT=7687
+    depends_on:
+      memgraph:
+        condition: service_healthy
+      memgraph-storage:
+        condition: service_healthy
+    networks:
+      - memgraph-net
+
+  # ─────────────────────────────────────────────
+  # Web App – parameterized query portal
+  # ─────────────────────────────────────────────
+  webapp:
+    build: ./webapp
+    ports:
+      - "5000:5000"
+    environment:
+      - MEMGRAPH_HOST=memgraph
+      - MEMGRAPH_PORT=7687
+      - LAB_URL=http://localhost:3000
+    depends_on:
+      memgraph:
+        condition: service_healthy
+    networks:
+      - memgraph-net
+
+volumes:
+  memgraph-data:
+  memgraph-storage-data:
+
+networks:
+  memgraph-net:
+    driver: bridge

@@ -1,0 +1,222 @@
+/* ── ABSA Fraud Detection – Custom Styles ─────────────────────── */
+
+body {
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  background-color: #0d1117;
+}
+
+/* Navbar */
+.navbar {
+  background-color: #161b22;
+}
+.navbar-brand {
+  font-size: 1.15rem;
+}
+
+/* Cards */
+.card {
+  background-color: #161b22;
+  border-color: #30363d;
+}
+.card-header {
+  background-color: #21262d;
+  border-color: #30363d;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+.card-footer {
+  background-color: #21262d;
+  border-color: #30363d;
+}
+
+/* List group items inside cards */
+.list-group-item {
+  background-color: #161b22;
+  border-color: #30363d;
+  color: #c9d1d9;
+  font-size: 0.9rem;
+  transition: background-color 0.15s;
+}
+.list-group-item:hover,
+.list-group-item:focus {
+  background-color: #21262d;
+  color: #f0f6fc;
+}
+
+/* Results table */
+.table {
+  font-size: 0.85rem;
+  color: #c9d1d9;
+}
+.table th {
+  background-color: #21262d;
+  color: #8b949e;
+  font-weight: 600;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+  letter-spacing: 0.05em;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.table td {
+  vertical-align: middle;
+  border-color: #21262d;
+}
+.table-hover tbody tr:hover {
+  background-color: rgba(56, 139, 253, 0.1);
+}
+
+/* Account links in table */
+.acct-link {
+  color: #58a6ff;
+  text-decoration: none;
+  font-family: 'Fira Code', 'Cascadia Code', monospace;
+  font-size: 0.85rem;
+}
+.acct-link:hover {
+  text-decoration: underline;
+  color: #79c0ff;
+}
+
+/* Scrollable table container */
+.table-responsive {
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+
+/* Input styling */
+.form-control,
+.input-group-text {
+  background-color: #0d1117;
+  border-color: #30363d;
+  color: #c9d1d9;
+}
+.form-control:focus {
+  background-color: #0d1117;
+  border-color: #58a6ff;
+  color: #f0f6fc;
+  box-shadow: 0 0 0 0.2rem rgba(56, 139, 253, 0.25);
+}
+
+/* Badge refinements */
+.badge {
+  font-weight: 500;
+}
+
+/* Details/summary for arrays */
+details summary {
+  cursor: pointer;
+  color: #58a6ff;
+}
+details summary:hover {
+  text-decoration: underline;
+}
+
+/* Empty state */
+#emptyState .bi,
+#graphEmpty .bi,
+#labPlaceholder .bi {
+  opacity: 0.3;
+}
+
+/* ── Orb Graph Container ───────────────────────────────────────── */
+
+.orb-container {
+  width: 100%;
+  height: calc(100vh - 260px);
+  min-height: 400px;
+  background-color: #0d1117;
+  border: 1px solid #30363d;
+  border-radius: 0.5rem;
+  position: relative;
+}
+.orb-container canvas {
+  border-radius: 0.5rem;
+  cursor: pointer;
+}
+
+/* Graph loading overlay */
+.graph-loading-overlay {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: calc(100vh - 260px);
+  min-height: 400px;
+  background-color: rgba(13, 17, 23, 0.85);
+  border: 1px solid #30363d;
+  border-radius: 0.5rem;
+}
+
+/* ── Properties Panel ──────────────────────────────────────────── */
+
+.props-panel {
+  height: calc(100vh - 260px);
+  min-height: 400px;
+  overflow-y: auto;
+  background-color: #161b22;
+  border-color: #30363d;
+}
+.props-panel .card-header {
+  background-color: #21262d;
+  border-color: #30363d;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.props-table {
+  font-size: 0.8rem;
+}
+.props-table td {
+  padding: 0.3rem 0.5rem;
+  border-color: #21262d;
+  vertical-align: top;
+}
+.props-table td:first-child {
+  font-weight: 600;
+  color: #8b949e;
+  white-space: nowrap;
+  width: 1%;
+}
+.props-table td:last-child {
+  color: #c9d1d9;
+  word-break: break-all;
+}
+
+/* Legend icons/dots/lines */
+.legend-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+.legend-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+.legend-line {
+  display: inline-block;
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+/* Responsive tweaks */
+@media (max-width: 991.98px) {
+  .table-responsive {
+    max-height: 60vh;
+  }
+  .orb-container,
+  .graph-loading-overlay,
+  .props-panel {
+    height: 50vh;
+    min-height: 300px;
+  }
+}
