@@ -1,0 +1,9 @@
+# PySpark 3.5.x (Scala 2.12) — required because the Neo4j Spark Connector
+# does not support Spark 4.x yet.
+pyspark>=3.5.0,<4.0.0
+
+# Neo4j driver — used for admin operations (clear, indexes, verify)
+neo4j>=5.0.0
+
+# Neo4j Spark Connector is a JVM dependency, pulled automatically via
+# spark.jars.packages = org.neo4j:neo4j-connector-apache-spark_2.12:5.4.0_for_spark_3
