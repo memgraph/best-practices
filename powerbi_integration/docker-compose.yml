@@ -1,0 +1,24 @@
+services:
+  memgraph:
+    image: memgraph/memgraph-mage:3.9.0
+    container_name: memgraph-powerbi
+    ports:
+      - "7687:7687"
+      - "3000:3000"
+    command:
+      [
+        "--telemetry-enabled=false",
+        "--log-level=TRACE",
+        "--also-log-to-stderr=true",
+      ]
+
+  api:
+    build: .
+    container_name: memgraph-powerbi-api
+    ports:
+      - "8000:8000"
+    environment:
+      - MEMGRAPH_HOST=memgraph
+      - MEMGRAPH_PORT=7687
+    depends_on:
+      - memgraph
