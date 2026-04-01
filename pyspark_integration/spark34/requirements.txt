@@ -1,0 +1,8 @@
+# PySpark 3.4.x (Scala 2.12)
+pyspark>=3.4.0,<3.5.0
+
+# Neo4j driver — used for admin operations (clear, indexes, verify)
+neo4j>=5.0.0
+
+# Neo4j Spark Connector 5.3.2 (JVM dep, pulled automatically via spark.jars.packages)
+# Maven: org.neo4j:neo4j-connector-apache-spark_2.12:5.4.0_for_spark_3
