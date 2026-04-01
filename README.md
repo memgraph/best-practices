@@ -69,6 +69,9 @@ Deploy Memgraph using methods that suit your environment, whether it's container
 ### NeoDash
 - [Connect Memgraph with NeoDash](./neodash/)
 
+### Power BI
+- [Power BI integration (Python script, REST API, ODBC)](./powerbi_integration/)
+
 ### Python
 - [GQLAlchemy basic example of creating and reading nodes](./python/querying/creating_and_reading_nodes/)
 
