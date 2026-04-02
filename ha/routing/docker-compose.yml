@@ -1,0 +1,123 @@
+services:
+  coord1:
+    image: "memgraph/memgraph-mage:3.2"
+    container_name: coord1
+    volumes:
+      - ./license.cypherl:/tmp/init/license.cypherl:ro
+      - ./HA_register.cypherl:/tmp/init/HA_register.cypherl:ro
+      - mg_lib1:/var/lib/memgraph
+      - mg_log1:/var/log/memgraph
+    environment:
+      - MEMGRAPH_HA_CLUSTER_INIT_QUERIES=/tmp/init/HA_register.cypherl
+    command: ["--init-file=/tmp/init/license.cypherl", "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7691", "--coordinator-id=1", "--coordinator-port=10111", "--management-port=12121", "--coordinator-hostname=coord1", "--nuraft-log-file=/var/log/memgraph/nuraft"]
+    networks:
+      memgraph_ha:
+        ipv4_address: 172.21.0.4
+    ports:
+      - "7691:7691"
+    depends_on:
+      - instance1
+      - instance2
+      - instance3
+
+  coord2:
+    image: "memgraph/memgraph-mage:3.2"
+    container_name: coord2
+    volumes:
+      - ./license.cypherl:/tmp/init/license.cypherl:ro
+      - mg_lib2:/var/lib/memgraph
+      - mg_log2:/var/log/memgraph
+    command: [ "--init-file=/tmp/init/license.cypherl", "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7692", "--coordinator-id=2", "--coordinator-port=10112", "--management-port=12122", "--coordinator-hostname=coord2" , "--nuraft-log-file=/var/log/memgraph/nuraft"]
+    networks:
+      memgraph_ha:
+        ipv4_address: 172.21.0.2
+    ports:
+      - "7692:7692"
+    depends_on:
+      - instance1
+      - instance2
+      - instance3
+
+  coord3:
+    image: "memgraph/memgraph-mage:3.2"
+    container_name: coord3
+    volumes:
+      - ./license.cypherl:/tmp/init/license.cypherl:ro
+      - mg_lib3:/var/lib/memgraph
+      - mg_log3:/var/log/memgraph
+    command: [ "--init-file=/tmp/init/license.cypherl",  "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7693", "--coordinator-id=3", "--coordinator-port=10113", "--management-port=12123", "--coordinator-hostname=coord3" , "--nuraft-log-file=/var/log/memgraph/nuraft"]
+
+    networks:
+      memgraph_ha:
+        ipv4_address: 172.21.0.3
+    ports:
+      - "7693:7693"
+    depends_on:
+      - instance1
+      - instance2
+      - instance3
+
+  instance1:
+    image: "memgraph/memgraph-mage:3.2"
+    container_name: instance1
+    volumes:
+      - ./license.cypherl:/tmp/init/license.cypherl:ro
+      - mg_lib4:/var/lib/memgraph
+      - mg_log4:/var/log/memgraph
+    command: ["--init-file=/tmp/init/license.cypherl", "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7687", "--management-port=13011"]
+    networks:
+      memgraph_ha:
+        ipv4_address: 172.21.0.6
+    ports:
+      - "7687:7687"
+
+  instance2:
+    image: "memgraph/memgraph-mage:3.2"
+    container_name: instance2
+    volumes:
+      - ./license.cypherl:/tmp/init/license.cypherl:ro
+      - mg_lib5:/var/lib/memgraph
+      - mg_log5:/var/log/memgraph
+    command: ["--init-file=/tmp/init/license.cypherl", "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7688", "--management-port=13012"]
+    networks:
+      memgraph_ha:
+        ipv4_address: 172.21.0.7
+    ports:
+      - "7688:7688"
+
+  instance3:
+    image: "memgraph/memgraph-mage:3.2"
+    container_name: instance3
+    volumes:
+      - ./license.cypherl:/tmp/init/license.cypherl:ro
+      - mg_lib6:/var/lib/memgraph
+      - mg_log6:/var/log/memgraph
+    command: ["--init-file=/tmp/init/license.cypherl", "--log-level=TRACE", "--also-log-to-stderr", "--bolt-port=7689", "--management-port=13013"]
+    networks:
+      memgraph_ha:
+        ipv4_address: 172.21.0.8
+    ports:
+      - "7689:7689"
+
+volumes:
+  mg_lib1:
+  mg_lib2:
+  mg_lib3:
+  mg_lib4:
+  mg_lib5:
+  mg_lib6:
+  mg_log1:
+  mg_log2:
+  mg_log3:
+  mg_log4:
+  mg_log5:
+  mg_log6:
+
+networks:
+  memgraph_ha:
+    name: memgraph_ha
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: "172.21.0.0/16"
