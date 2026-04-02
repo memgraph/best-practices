@@ -57,6 +57,9 @@ Deploy Memgraph using methods that suit your environment, whether it's container
 - [Importing data from Neo4j (nodes only)](./import/migrate/neo4j/migrate_nodes/)
 - [Import tool from Neo4j (complete)](./import/migrate/neo4j/complete_migration/)
 
+### Monitoring
+- [Memory tracking and license usage monitoring](./monitoring/memory_tracking/)
+
 ### Java
 - [Simple Java app with ingestion and querying](./java/querying/)
 
