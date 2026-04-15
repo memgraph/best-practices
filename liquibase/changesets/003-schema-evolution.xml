@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:neo4j="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- Schema evolution: add KNOWS relationships and enrich existing nodes. -->
+    <!-- This changeset demonstrates how Liquibase tracks incremental graph changes. -->
+
+    <changeSet id="create-knows-relationships" author="memgraph">
+        <comment>Add social connections between people</comment>
+        <neo4j:cypher>
+            MATCH (a:Person {email: 'alice@memgraph.io'}), (b:Person {email: 'bob@memgraph.io'})
+            CREATE (a)-[:KNOWS {since: 2020, context: 'coworkers'}]->(b)
+        </neo4j:cypher>
+        <neo4j:cypher>
+            MATCH (a:Person {email: 'alice@memgraph.io'}), (c:Person {email: 'charlie@techcorp.com'})
+            CREATE (a)-[:KNOWS {since: 2022, context: 'conference'}]->(c)
+        </neo4j:cypher>
+        <neo4j:cypher>
+            MATCH (c:Person {email: 'charlie@techcorp.com'}), (d:Person {email: 'diana@techcorp.com'})
+            CREATE (c)-[:KNOWS {since: 2018, context: 'coworkers'}]->(d)
+        </neo4j:cypher>
+        <rollback>
+            <neo4j:cypher>MATCH ()-[r:KNOWS]->() DELETE r</neo4j:cypher>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="add-department-to-works-at" author="memgraph">
+        <comment>Enrich WORKS_AT relationships with department information</comment>
+        <neo4j:cypher>
+            MATCH (p:Person {email: 'alice@memgraph.io'})-[r:WORKS_AT]->(:Company {name: 'Memgraph'})
+            SET r.department = 'Engineering'
+        </neo4j:cypher>
+        <neo4j:cypher>
+            MATCH (p:Person {email: 'bob@memgraph.io'})-[r:WORKS_AT]->(:Company {name: 'Memgraph'})
+            SET r.department = 'Product'
+        </neo4j:cypher>
+        <neo4j:cypher>
+            MATCH (p:Person {email: 'charlie@techcorp.com'})-[r:WORKS_AT]->(:Company {name: 'TechCorp'})
+            SET r.department = 'Data Science'
+        </neo4j:cypher>
+        <neo4j:cypher>
+            MATCH (p:Person {email: 'diana@techcorp.com'})-[r:WORKS_AT]->(:Company {name: 'TechCorp'})
+            SET r.department = 'Executive'
+        </neo4j:cypher>
+        <rollback>
+            <neo4j:cypher>MATCH ()-[r:WORKS_AT]->() REMOVE r.department</neo4j:cypher>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="add-person-active-status" author="memgraph">
+        <comment>Add active status flag to all Person nodes</comment>
+        <neo4j:cypher>
+            MATCH (p:Person) SET p.active = true
+        </neo4j:cypher>
+        <rollback>
+            <neo4j:cypher>MATCH (p:Person) REMOVE p.active</neo4j:cypher>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>
