@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:neo4j="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- Create indexes on frequently queried properties. -->
+    <!-- Indexes speed up MATCH lookups and are essential for performant graph queries. -->
+
+    <changeSet id="create-person-email-index" author="memgraph">
+        <neo4j:cypher>CREATE INDEX ON :Person(email)</neo4j:cypher>
+        <rollback>
+            <neo4j:cypher>DROP INDEX ON :Person(email)</neo4j:cypher>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="create-person-name-index" author="memgraph">
+        <neo4j:cypher>CREATE INDEX ON :Person(name)</neo4j:cypher>
+        <rollback>
+            <neo4j:cypher>DROP INDEX ON :Person(name)</neo4j:cypher>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="create-company-name-index" author="memgraph">
+        <neo4j:cypher>CREATE INDEX ON :Company(name)</neo4j:cypher>
+        <rollback>
+            <neo4j:cypher>DROP INDEX ON :Company(name)</neo4j:cypher>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

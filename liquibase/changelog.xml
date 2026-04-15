@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- Master changelog: includes all changesets in order. -->
+    <!-- Each file is executed once and tracked by Liquibase's internal history graph. -->
+
+    <include file="changesets/001-create-indexes.xml"/>
+    <include file="changesets/002-seed-graph.xml"/>
+    <include file="changesets/003-schema-evolution.xml"/>
+
+</databaseChangeLog>

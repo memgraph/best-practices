@@ -1,0 +1,22 @@
+FROM liquibase/liquibase:4.29.2
+
+# Install the Neo4j extension for Liquibase and its dependencies.
+# Memgraph speaks the Bolt protocol, so the Neo4j Liquibase plugin works
+# against Memgraph with minimal configuration.
+
+USER root
+
+ADD https://repo1.maven.org/maven2/org/liquibase/ext/liquibase-neo4j/4.29.2/liquibase-neo4j-4.29.2.jar \
+    /liquibase/lib/liquibase-neo4j.jar
+
+ADD https://repo1.maven.org/maven2/org/neo4j/driver/neo4j-java-driver/5.26.0/neo4j-java-driver-5.26.0.jar \
+    /liquibase/lib/neo4j-java-driver.jar
+
+ADD https://repo1.maven.org/maven2/org/reactivestreams/reactive-streams/1.0.4/reactive-streams-1.0.4.jar \
+    /liquibase/lib/reactive-streams.jar
+
+RUN chmod 644 /liquibase/lib/liquibase-neo4j.jar \
+              /liquibase/lib/neo4j-java-driver.jar \
+              /liquibase/lib/reactive-streams.jar
+
+USER liquibase

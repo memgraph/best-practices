@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<databaseChangeLog xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:neo4j="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                   http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
+
+    <!-- Seed the graph with initial Person and Company nodes, plus WORKS_AT relationships. -->
+
+    <changeSet id="create-person-nodes" author="memgraph">
+        <neo4j:cypher>
+            CREATE (:Person {name: 'Alice', email: 'alice@memgraph.io', role: 'Engineer'})
+        </neo4j:cypher>
+        <neo4j:cypher>
+            CREATE (:Person {name: 'Bob', email: 'bob@memgraph.io', role: 'Product Manager'})
+        </neo4j:cypher>
+        <neo4j:cypher>
+            CREATE (:Person {name: 'Charlie', email: 'charlie@techcorp.com', role: 'Data Scientist'})
+        </neo4j:cypher>
+        <neo4j:cypher>
+            CREATE (:Person {name: 'Diana', email: 'diana@techcorp.com', role: 'CTO'})
+        </neo4j:cypher>
+        <rollback>
+            <neo4j:cypher>MATCH (p:Person) WHERE p.email IN ['alice@memgraph.io', 'bob@memgraph.io', 'charlie@techcorp.com', 'diana@techcorp.com'] DETACH DELETE p</neo4j:cypher>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="create-company-nodes" author="memgraph">
+        <neo4j:cypher>
+            CREATE (:Company {name: 'Memgraph', founded: 2016, domain: 'graph-databases'})
+        </neo4j:cypher>
+        <neo4j:cypher>
+            CREATE (:Company {name: 'TechCorp', founded: 2010, domain: 'data-analytics'})
+        </neo4j:cypher>
+        <rollback>
+            <neo4j:cypher>MATCH (c:Company) WHERE c.name IN ['Memgraph', 'TechCorp'] DETACH DELETE c</neo4j:cypher>
+        </rollback>
+    </changeSet>
+
+    <changeSet id="create-works-at-relationships" author="memgraph">
+        <neo4j:cypher>
+            MATCH (p:Person {email: 'alice@memgraph.io'}), (c:Company {name: 'Memgraph'})
+            CREATE (p)-[:WORKS_AT {since: 2020}]->(c)
+        </neo4j:cypher>
+        <neo4j:cypher>
+            MATCH (p:Person {email: 'bob@memgraph.io'}), (c:Company {name: 'Memgraph'})
+            CREATE (p)-[:WORKS_AT {since: 2021}]->(c)
+        </neo4j:cypher>
+        <neo4j:cypher>
+            MATCH (p:Person {email: 'charlie@techcorp.com'}), (c:Company {name: 'TechCorp'})
+            CREATE (p)-[:WORKS_AT {since: 2018}]->(c)
+        </neo4j:cypher>
+        <neo4j:cypher>
+            MATCH (p:Person {email: 'diana@techcorp.com'}), (c:Company {name: 'TechCorp'})
+            CREATE (p)-[:WORKS_AT {since: 2015}]->(c)
+        </neo4j:cypher>
+        <rollback>
+            <neo4j:cypher>MATCH ()-[r:WORKS_AT]->() DELETE r</neo4j:cypher>
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

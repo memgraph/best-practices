@@ -1,0 +1,44 @@
+services:
+  memgraph:
+    image: memgraph/memgraph-mage:3.9.0
+    container_name: memgraph-liquibase
+    ports:
+      - "7687:7687"
+      - "3000:3000"
+    command:
+      [
+        "--bolt-server-name-for-init=Neo4j/5.2.0",
+        "--log-level=TRACE",
+        "--also-log-to-stderr=true",
+        "--telemetry-enabled=false",
+      ]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "echo 'RETURN 1;' | mgconsole --host 127.0.0.1 --port 7687 || exit 1",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  liquibase:
+    build:
+      context: .
+      dockerfile: Dockerfile.liquibase
+    container_name: liquibase-runner
+    depends_on:
+      memgraph:
+        condition: service_healthy
+    volumes:
+      - ./liquibase.properties:/liquibase/liquibase.properties
+      - ./changelog.xml:/liquibase/changelog/changelog.xml
+      - ./changesets:/liquibase/changelog/changesets
+    command:
+      [
+        "--defaults-file=/liquibase/liquibase.properties",
+        "--changelog-file=changelog.xml",
+        "--search-path=/liquibase/changelog",
+        "update",
+      ]
