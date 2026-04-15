@@ -1,0 +1,37 @@
+services:
+  memgraph:
+    image: memgraph/memgraph-mage:3.9.0
+    container_name: memgraph-flyway
+    ports:
+      - "7687:7687"
+      - "3000:3000"
+    command:
+      [
+        "--bolt-server-name-for-init=Neo4j/5.2.0",
+        "--log-level=TRACE",
+        "--also-log-to-stderr=true",
+        "--telemetry-enabled=false",
+      ]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "echo 'RETURN 1;' | mgconsole --host 127.0.0.1 --port 7687 || exit 1",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  flyway:
+    build:
+      context: .
+      dockerfile: Dockerfile.flyway
+    container_name: flyway-runner
+    depends_on:
+      memgraph:
+        condition: service_healthy
+    volumes:
+      - ./flyway.conf:/flyway/conf/flyway.conf
+      - ./sql:/flyway/sql
+    command: migrate

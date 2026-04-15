@@ -35,6 +35,9 @@ Deploy Memgraph using methods that suit your environment, whether it's container
 
 ## List of best practices
 
+### Database Migrations
+- [Schema migrations with Flyway and Memgraph](./flyway/)
+
 ### Debugging
 - [Generating a core dump with Memgraph in Docker Compose](./debugging/docker_compose_with_core_dump_generation/)
 

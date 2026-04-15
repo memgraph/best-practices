@@ -1,0 +1,18 @@
+FROM flyway/flyway:11.1.0
+
+# Install the Neo4j JDBC driver (full bundle: driver + Bolt + SQL translator)
+# and the Flyway plugin for Neo4j (implements Flyway's database SPI for graph DBs).
+# Memgraph speaks the Bolt protocol, so the Neo4j JDBC driver connects directly.
+
+USER root
+
+ADD https://repo1.maven.org/maven2/org/neo4j/neo4j-jdbc-full-bundle/6.12.1/neo4j-jdbc-full-bundle-6.12.1.jar \
+    /flyway/jars/neo4j-jdbc-full-bundle.jar
+
+ADD https://repo1.maven.org/maven2/eu/michael-simons/neo4j/neo4j-flyway-database/0.0.4/neo4j-flyway-database-0.0.4.jar \
+    /flyway/jars/neo4j-flyway-database.jar
+
+RUN chmod 644 /flyway/jars/neo4j-jdbc-full-bundle.jar \
+              /flyway/jars/neo4j-flyway-database.jar
+
+USER flyway
