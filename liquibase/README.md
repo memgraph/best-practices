@@ -11,10 +11,10 @@ changelog.xml (master)
   └── 003-schema-evolution.xml    against Memgraph
          │
          ▼
-  ┌─────────────┐     Bolt (7687)     ┌─────────────┐
+  ┌──────────────┐     Bolt (7687)     ┌─────────────┐
   │  Liquibase   │ ──────────────────> │  Memgraph   │
   │  (Neo4j ext) │                     │  (MAGE)     │
-  └─────────────┘                     └─────────────┘
+  └──────────────┘                     └─────────────┘
 ```
 
 ## What This Example Does

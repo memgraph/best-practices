@@ -10,7 +10,6 @@ services:
         "--bolt-server-name-for-init=Neo4j/5.2.0",
         "--log-level=TRACE",
         "--also-log-to-stderr=true",
-        "--telemetry-enabled=false",
       ]
     healthcheck:
       test:
