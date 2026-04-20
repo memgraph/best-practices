@@ -84,6 +84,7 @@ liquibase/
 │   ├── 001-create-indexes.xml         # Index creation
 │   ├── 002-seed-graph.xml             # Initial nodes and relationships
 │   └── 003-schema-evolution.xml       # Schema changes (new rels, properties)
+├── patch_jar.py                       # Patches liquibase-neo4j JAR for Memgraph compatibility
 ├── requirements.txt                   # Python deps for verification script
 └── verify_migration.py                # Verify migration results
 ```
@@ -137,6 +138,10 @@ DML changesets (`CREATE`, `MERGE`, `MATCH`, `SET`) do not need this attribute.
 - **Memgraph v2.11+** defaults `--bolt-server-name-for-init` to a Neo4j-compatible value, so the flag in `docker-compose.yml` is technically optional on recent versions but kept explicit for clarity.
 - The `liquibase-neo4j` extension stores migration history as graph nodes with labels prefixed by `__Liquibase`. These are regular nodes and can be queried: `MATCH (n) WHERE any(l IN labels(n) WHERE l STARTS WITH '__Liquibase') RETURN n`.
 - If you encounter issues with the Neo4j extension's internal queries, check the [liquibase-neo4j GitHub](https://github.com/liquibase/liquibase-neo4j) for the latest compatibility information.
+
+## Memgraph Edition
+
+This example works with **Memgraph Community Edition**. No Enterprise features are required.
 
 ## Version Compatibility
 
