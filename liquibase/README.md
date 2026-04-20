@@ -119,6 +119,19 @@ When writing Cypher for Memgraph changesets, keep these syntax differences in mi
 
 Stick to **standard Cypher** (`CREATE`, `MATCH`, `MERGE`, `SET`, `DELETE`) for maximum compatibility. Avoid Neo4j-specific features like `CALL {} IN TRANSACTIONS` or APOC procedures.
 
+### DDL changesets must opt out of transactions
+
+Memgraph does not allow DDL statements (`CREATE INDEX`, `CREATE CONSTRAINT`, `DROP INDEX`, `DROP CONSTRAINT`) inside explicit multi-command transactions. Add `runInTransaction="false"` to every changeset that contains only DDL:
+
+```xml
+<changeSet id="create-person-email-index" author="memgraph" runInTransaction="false">
+    <neo4j:cypher>CREATE INDEX ON :Person(email)</neo4j:cypher>
+    ...
+</changeSet>
+```
+
+DML changesets (`CREATE`, `MERGE`, `MATCH`, `SET`) do not need this attribute.
+
 ## Compatibility Notes
 
 - **Memgraph v2.11+** defaults `--bolt-server-name-for-init` to a Neo4j-compatible value, so the flag in `docker-compose.yml` is technically optional on recent versions but kept explicit for clarity.

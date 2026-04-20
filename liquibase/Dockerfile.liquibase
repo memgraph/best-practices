@@ -1,13 +1,23 @@
-FROM liquibase/liquibase:4.29.2
+# Stage 1: patch the liquibase-neo4j JAR.
+# liquibase-neo4j hardcodes "YIELD ... WHERE" syntax that Memgraph does not
+# support. patch_jar.py rewrites that single CONSTANT_Utf8 entry in
+# Neo4jDatabase.class to use "WITH ... WHERE" instead.
+FROM python:3.12-slim AS patcher
 
-# Install the Neo4j extension for Liquibase and its dependencies.
-# Memgraph speaks the Bolt protocol, so the Neo4j Liquibase plugin works
-# against Memgraph with minimal configuration.
+WORKDIR /work
+
+ADD https://repo1.maven.org/maven2/org/liquibase/ext/liquibase-neo4j/4.29.2/liquibase-neo4j-4.29.2.jar \
+    liquibase-neo4j.jar
+
+COPY patch_jar.py .
+RUN python3 patch_jar.py liquibase-neo4j.jar
+
+# Stage 2: final Liquibase image with the patched JAR and all runtime deps.
+FROM liquibase/liquibase:4.29.2
 
 USER root
 
-ADD https://repo1.maven.org/maven2/org/liquibase/ext/liquibase-neo4j/4.29.2/liquibase-neo4j-4.29.2.jar \
-    /liquibase/lib/liquibase-neo4j.jar
+COPY --from=patcher /work/liquibase-neo4j.jar /liquibase/lib/liquibase-neo4j.jar
 
 ADD https://repo1.maven.org/maven2/org/neo4j/driver/neo4j-java-driver/5.26.0/neo4j-java-driver-5.26.0.jar \
     /liquibase/lib/neo4j-java-driver.jar
@@ -15,8 +25,27 @@ ADD https://repo1.maven.org/maven2/org/neo4j/driver/neo4j-java-driver/5.26.0/neo
 ADD https://repo1.maven.org/maven2/org/reactivestreams/reactive-streams/1.0.4/reactive-streams-1.0.4.jar \
     /liquibase/lib/reactive-streams.jar
 
+ADD https://repo1.maven.org/maven2/io/netty/netty-common/4.1.114.Final/netty-common-4.1.114.Final.jar \
+    /liquibase/lib/netty-common.jar
+ADD https://repo1.maven.org/maven2/io/netty/netty-buffer/4.1.114.Final/netty-buffer-4.1.114.Final.jar \
+    /liquibase/lib/netty-buffer.jar
+ADD https://repo1.maven.org/maven2/io/netty/netty-resolver/4.1.114.Final/netty-resolver-4.1.114.Final.jar \
+    /liquibase/lib/netty-resolver.jar
+ADD https://repo1.maven.org/maven2/io/netty/netty-transport/4.1.114.Final/netty-transport-4.1.114.Final.jar \
+    /liquibase/lib/netty-transport.jar
+ADD https://repo1.maven.org/maven2/io/netty/netty-codec/4.1.114.Final/netty-codec-4.1.114.Final.jar \
+    /liquibase/lib/netty-codec.jar
+ADD https://repo1.maven.org/maven2/io/netty/netty-handler/4.1.114.Final/netty-handler-4.1.114.Final.jar \
+    /liquibase/lib/netty-handler.jar
+
 RUN chmod 644 /liquibase/lib/liquibase-neo4j.jar \
               /liquibase/lib/neo4j-java-driver.jar \
-              /liquibase/lib/reactive-streams.jar
+              /liquibase/lib/reactive-streams.jar \
+              /liquibase/lib/netty-common.jar \
+              /liquibase/lib/netty-buffer.jar \
+              /liquibase/lib/netty-resolver.jar \
+              /liquibase/lib/netty-transport.jar \
+              /liquibase/lib/netty-codec.jar \
+              /liquibase/lib/netty-handler.jar
 
 USER liquibase

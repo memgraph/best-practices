@@ -6,23 +6,25 @@
                    http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-latest.xsd">
 
     <!-- Create indexes on frequently queried properties. -->
-    <!-- Indexes speed up MATCH lookups and are essential for performant graph queries. -->
+    <!-- Memgraph does not allow DDL (CREATE INDEX) inside explicit multi-command
+         transactions. runInTransaction="false" tells Liquibase to execute each
+         changeset in auto-commit mode instead of wrapping it in a transaction. -->
 
-    <changeSet id="create-person-email-index" author="memgraph">
+    <changeSet id="create-person-email-index" author="memgraph" runInTransaction="false">
         <neo4j:cypher>CREATE INDEX ON :Person(email)</neo4j:cypher>
         <rollback>
             <neo4j:cypher>DROP INDEX ON :Person(email)</neo4j:cypher>
         </rollback>
     </changeSet>
 
-    <changeSet id="create-person-name-index" author="memgraph">
+    <changeSet id="create-person-name-index" author="memgraph" runInTransaction="false">
         <neo4j:cypher>CREATE INDEX ON :Person(name)</neo4j:cypher>
         <rollback>
             <neo4j:cypher>DROP INDEX ON :Person(name)</neo4j:cypher>
         </rollback>
     </changeSet>
 
-    <changeSet id="create-company-name-index" author="memgraph">
+    <changeSet id="create-company-name-index" author="memgraph" runInTransaction="false">
         <neo4j:cypher>CREATE INDEX ON :Company(name)</neo4j:cypher>
         <rollback>
             <neo4j:cypher>DROP INDEX ON :Company(name)</neo4j:cypher>
