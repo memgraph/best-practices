@@ -60,6 +60,9 @@ Deploy Memgraph using methods that suit your environment, whether it's container
 ### Java
 - [Simple Java app with ingestion and querying](./java/querying/)
 
+### Liquibase
+- [Schema migrations with Liquibase and Memgraph](./liquibase/)
+
 ### Memgraph Lab
 - [Memgraph Community with Memgraph Lab deployment in Docker compose](./memgraph_lab/community_lab_docker_compose/)
 - [Memgraph Lab Enterprise Edition deployment in Docker compose](./memgraph_lab/enterprise_lab_docker_compose/)
