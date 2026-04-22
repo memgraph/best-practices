@@ -1,0 +1,28 @@
+services:
+  backend:
+    build:
+      context: ./backend
+    env_file:
+      - path: ./.env
+        required: false
+    environment:
+      - PORT=8001
+      - REPO_ROOT=/data/repos
+    volumes:
+      # Persist cloned repos across rebuilds so we don't re-clone every start.
+      - memgraph-repos:/data/repos
+    expose:
+      - "8001"
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "3001:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+volumes:
+  memgraph-repos:

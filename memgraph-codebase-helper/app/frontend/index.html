@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Memgraph Codebase Helper</title>
+
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter+Tight:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              brand: {
+                black: "#231F20",
+                gray: "#646265",
+                orange: "#FB6E00",
+                surface: "#F9F9F9",
+                border: "#ECECEC",
+              },
+            },
+            fontFamily: {
+              sans: ['"Inter Tight"', "system-ui", "sans-serif"],
+            },
+            borderRadius: {
+              brand: "8px",
+            },
+          },
+        },
+      };
+    </script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js"></script>
+
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+
+  <body class="h-screen overflow-hidden bg-white text-brand-black antialiased">
+    <div class="flex h-full min-h-0">
+      <aside
+        class="hidden w-72 flex-col border-r border-brand-border bg-white p-6 md:flex"
+      >
+        <div class="mb-8">
+          <div class="text-lg font-semibold leading-tight">Codebase Helper</div>
+          <div class="mt-1 text-sm font-normal text-brand-gray">
+            Memgraph engineering
+          </div>
+        </div>
+
+        <button
+          id="new-chat"
+          class="mb-8 rounded-brand border border-brand-border bg-white px-3 py-2 text-sm font-normal text-brand-black transition hover:border-brand-black/30"
+        >
+          + New chat
+        </button>
+
+        <div
+          class="mb-3 text-[11px] font-semibold uppercase tracking-[0.08em] text-brand-gray"
+        >
+          Repos indexed
+        </div>
+        <ul id="repos-list" class="space-y-2 text-sm font-normal"></ul>
+
+        <section id="api-key-section" class="mt-6">
+          <div
+            class="mb-2 text-[11px] font-semibold uppercase tracking-[0.08em] text-brand-gray"
+          >
+            Anthropic API key
+          </div>
+
+          <div id="api-key-set" class="hidden">
+            <div class="api-key-card">
+              <div class="api-key-card-head">
+                <span class="api-key-dot" aria-hidden="true"></span>
+                <span>Key configured</span>
+              </div>
+              <div id="api-key-preview" class="api-key-preview"></div>
+            </div>
+            <button
+              id="api-key-change"
+              type="button"
+              class="mt-2 w-full rounded-brand border border-brand-border bg-white px-3 py-2 text-xs font-medium text-brand-black transition hover:border-brand-black/30"
+            >
+              Change key
+            </button>
+          </div>
+
+          <div id="api-key-edit" class="hidden">
+            <div class="mb-2 text-xs font-normal leading-relaxed text-brand-gray">
+              Paste an API key — kept in the backend's memory only, never
+              written to disk.
+            </div>
+            <textarea
+              id="api-key-input"
+              rows="2"
+              spellcheck="false"
+              autocomplete="off"
+              placeholder="sk-ant-..."
+              class="w-full resize-none rounded-brand border border-brand-border bg-white px-3 py-2 font-mono text-xs text-brand-black placeholder:text-brand-gray focus:border-brand-black/40 focus:outline-none"
+            ></textarea>
+            <div class="mt-2 flex gap-2">
+              <button
+                id="api-key-save"
+                type="button"
+                class="flex-1 rounded-brand border border-brand-border bg-white px-3 py-2 text-xs font-medium text-brand-black transition hover:border-brand-black/30"
+              >
+                Save key
+              </button>
+              <button
+                id="api-key-cancel"
+                type="button"
+                class="hidden rounded-brand border border-brand-border bg-white px-3 py-2 text-xs font-medium text-brand-gray transition hover:border-brand-black/30 hover:text-brand-black"
+              >
+                Cancel
+              </button>
+            </div>
+            <div
+              id="api-key-status"
+              class="mt-2 text-xs font-normal text-brand-gray"
+            ></div>
+          </div>
+        </section>
+
+        <div class="mt-auto pt-8 text-xs font-normal leading-relaxed text-brand-gray">
+          Ground-truth answers only — every file / line reference comes from a
+          real Grep or Read against the checkout.
+        </div>
+      </aside>
+
+      <main class="flex min-h-0 flex-1 flex-col">
+        <header
+          class="flex items-center justify-between border-b border-brand-border bg-white px-8 py-4"
+        >
+          <div>
+            <div class="text-base font-semibold">Ask about the Memgraph codebase</div>
+            <div class="mt-0.5 text-xs font-normal text-brand-gray">
+              Powered by Claude with Read · Grep · Glob · Bash
+            </div>
+          </div>
+          <div class="flex items-center gap-3">
+            <div
+              id="status"
+              class="text-xs font-normal text-brand-gray"
+            >
+              ready
+            </div>
+          </div>
+        </header>
+
+        <div id="progress-bar" class="progress-bar" aria-hidden="true"></div>
+
+        <div
+          id="messages"
+          class="min-h-0 flex-1 space-y-6 overflow-y-auto bg-brand-surface px-8 py-10"
+        >
+          <div class="mx-auto max-w-2xl text-center">
+            <div class="text-xl font-semibold text-brand-black">
+              What do you want to know?
+            </div>
+            <div class="mt-2 text-sm font-normal text-brand-gray">
+              Try:
+              <span class="italic">“How does WAL recovery work on startup?”</span>
+              or
+              <span class="italic">“Walk me through how BFS is implemented.”</span>
+            </div>
+          </div>
+        </div>
+
+        <form
+          id="chat-form"
+          class="border-t border-brand-border bg-white px-8 py-5"
+        >
+          <div
+            class="mx-auto mb-3 flex max-w-3xl flex-wrap items-center gap-3"
+          >
+            <span class="text-[11px] font-semibold uppercase tracking-[0.08em] text-brand-gray">
+              Answer mode
+            </span>
+            <div id="mode-toggle" class="mode-toggle" role="radiogroup" aria-label="Answer mode">
+              <button type="button" data-mode="both" class="mode-btn" title="Usage first, then implementation (default)">Both</button>
+              <button type="button" data-mode="usage" class="mode-btn" title="Describe the feature from a user's perspective only">Usage</button>
+              <button type="button" data-mode="implementation" class="mode-btn" title="Walk the code path and internals only">Implementation</button>
+            </div>
+            <div class="ml-auto flex items-center gap-2">
+              <span class="text-[11px] font-semibold uppercase tracking-[0.08em] text-brand-gray">
+                Model
+              </span>
+              <select
+                id="model-select"
+                class="model-select"
+                title="Switching model starts a new chat"
+                aria-label="Model"
+              ></select>
+            </div>
+          </div>
+          <div
+            id="templates"
+            class="mx-auto mb-3 flex max-w-3xl flex-wrap gap-2"
+          ></div>
+          <div
+            id="attached-files"
+            class="mx-auto mb-2 hidden max-w-3xl flex-wrap gap-2"
+          ></div>
+          <div class="mx-auto flex max-w-3xl items-end gap-2">
+            <input id="file-input" type="file" multiple class="hidden" />
+            <button
+              id="attach-btn"
+              type="button"
+              title="Attach files (values.yaml, configs, logs, …)"
+              aria-label="Attach files"
+              class="attach-btn"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5 12.5 20a5.5 5.5 0 1 1-7.78-7.78l8.49-8.49a3.75 3.75 0 1 1 5.3 5.3l-8.48 8.49a2 2 0 1 1-2.83-2.83l7.78-7.78"/></svg>
+            </button>
+            <textarea
+              id="input"
+              rows="1"
+              placeholder="Ask anything about the Memgraph codebase…"
+              class="flex-1 resize-none rounded-brand border border-brand-border bg-white px-4 py-3 text-sm font-normal text-brand-black placeholder:text-brand-gray focus:border-brand-black/40 focus:outline-none"
+            ></textarea>
+            <button
+              id="send"
+              type="submit"
+              class="btn-gradient rounded-brand px-5 py-3 text-sm font-semibold text-white disabled:opacity-40"
+            >
+              Send
+            </button>
+          </div>
+        </form>
+      </main>
+    </div>
+
+    <script src="/static/app.js"></script>
+  </body>
+</html>

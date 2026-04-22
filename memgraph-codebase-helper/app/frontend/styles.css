@@ -1,0 +1,646 @@
+/* =============================================================
+   Memgraph brand tokens
+   60% White · 30% Light Gray · 10% Brand accent (orange/gradient)
+   Typography: Inter Tight only. Body = 400, headings = 600.
+   Radii: 2–8px.
+   ============================================================= */
+
+:root {
+  --brand-black: #231F20;
+  --brand-gray: #646265;
+  --brand-orange: #FB6E00;
+  --brand-surface: #F9F9F9;
+  --brand-border: #ECECEC;
+  --brand-border-strong: #D9D9D9;
+  --brand-gradient: linear-gradient(
+    30deg,
+    #FFC500 0%,
+    #DC2223 41%,
+    #720096 100%
+  );
+}
+
+html,
+body {
+  font-family: "Inter Tight", system-ui, -apple-system, Segoe UI, Roboto,
+    sans-serif;
+  font-weight: 400;
+  color: var(--brand-black);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+code,
+pre,
+.mono {
+  font-family: "Inter Tight", ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-variant-ligatures: none;
+}
+
+#messages {
+  scroll-behavior: smooth;
+}
+
+/* -------------------------------------------------------------
+   Primary action — the only element that carries the gradient.
+   ------------------------------------------------------------- */
+.btn-gradient {
+  background: var(--brand-gradient);
+  background-size: 140% 140%;
+  background-position: 0% 0%;
+  transition: filter 0.2s ease, background-position 0.25s ease,
+    transform 0.15s ease;
+  border: 0;
+}
+
+.btn-gradient:hover:not(:disabled) {
+  filter: brightness(1.05);
+  background-position: 100% 100%;
+}
+
+.btn-gradient:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* -------------------------------------------------------------
+   Indeterminate progress bar — visible while a request is in flight.
+   Sits directly below the header, 2px tall, occupies its own row so it
+   doesn't cause layout shift when toggled.
+   ------------------------------------------------------------- */
+.progress-bar {
+  position: relative;
+  height: 2px;
+  overflow: hidden;
+  background: transparent;
+  flex: 0 0 auto;
+  pointer-events: none;
+}
+
+.progress-bar::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 35%;
+  background: var(--brand-gradient);
+  transform: translateX(-110%);
+  opacity: 0;
+}
+
+.progress-bar.active {
+  background: rgba(251, 110, 0, 0.08);
+}
+
+.progress-bar.active::before {
+  opacity: 1;
+  animation: progress-slide 1.1s ease-in-out infinite;
+}
+
+@keyframes progress-slide {
+  0%   { transform: translateX(-110%); }
+  100% { transform: translateX(320%);  }
+}
+
+/* -------------------------------------------------------------
+   "Thinking…" placeholder bubble — shown immediately after submit,
+   removed when the first text or tool event arrives.
+   ------------------------------------------------------------- */
+.thinking-bubble {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: fit-content;
+  padding: 0.7rem 1rem;
+  border-radius: 8px;
+  background: #ffffff;
+  border: 1px solid var(--brand-border);
+  color: var(--brand-gray);
+  font-size: 0.85rem;
+}
+
+.thinking-bubble .dot {
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 50%;
+  background: var(--brand-gray);
+  animation: thinking-pulse 1.1s infinite;
+}
+
+.thinking-bubble .dot:nth-child(2) { animation-delay: 0.15s; }
+.thinking-bubble .dot:nth-child(3) { animation-delay: 0.30s; }
+
+@keyframes thinking-pulse {
+  0%, 80%, 100% { opacity: 0.25; transform: scale(0.85); }
+  40%           { opacity: 1;    transform: scale(1);    }
+}
+
+/* Running tool card — pulsing orange dot while the tool is in flight. */
+.tool-card .running-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--brand-orange);
+  margin-right: 0.1rem;
+  animation: thinking-pulse 1.1s infinite;
+}
+
+/* -------------------------------------------------------------
+   Message bubbles
+   Cards (assistant bubbles) must be white — never gray.
+   User bubble uses brand black for contrast.
+   ------------------------------------------------------------- */
+.bubble {
+  max-width: 46rem;
+  padding: 0.95rem 1.15rem;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 400;
+  line-height: 1.6;
+  word-wrap: break-word;
+}
+
+.bubble-user {
+  background: var(--brand-black);
+  color: #ffffff;
+  margin-left: auto;
+  white-space: pre-wrap;
+  font-weight: 400;
+}
+
+.bubble-assistant {
+  background: #ffffff;
+  color: var(--brand-black);
+  border: 1px solid var(--brand-border);
+}
+
+.bubble-assistant > *:first-child {
+  margin-top: 0;
+}
+.bubble-assistant > *:last-child {
+  margin-bottom: 0;
+}
+
+.bubble-assistant h1,
+.bubble-assistant h2,
+.bubble-assistant h3,
+.bubble-assistant h4 {
+  font-weight: 600;
+  color: var(--brand-black);
+  line-height: 1.3;
+  margin: 1rem 0 0.5rem;
+}
+
+.bubble-assistant h1 {
+  font-size: 1.15rem;
+}
+.bubble-assistant h2 {
+  font-size: 1.05rem;
+}
+.bubble-assistant h3 {
+  font-size: 0.98rem;
+}
+.bubble-assistant h4 {
+  font-size: 0.92rem;
+  color: var(--brand-gray);
+}
+
+.bubble-assistant p {
+  margin: 0 0 0.7rem;
+  font-weight: 400;
+}
+
+.bubble-assistant ul,
+.bubble-assistant ol {
+  margin: 0.3rem 0 0.75rem;
+  padding-left: 1.3rem;
+}
+
+.bubble-assistant li {
+  margin: 0.2rem 0;
+  font-weight: 400;
+}
+
+.bubble-assistant li > ul,
+.bubble-assistant li > ol {
+  margin: 0.15rem 0 0.25rem;
+}
+
+.bubble-assistant strong {
+  font-weight: 600;
+  color: var(--brand-black);
+}
+
+.bubble-assistant a {
+  color: var(--brand-orange);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.bubble-assistant hr {
+  border: 0;
+  border-top: 1px solid var(--brand-border);
+  margin: 0.95rem 0;
+}
+
+.bubble-assistant blockquote {
+  border-left: 2px solid var(--brand-border-strong);
+  margin: 0.6rem 0;
+  padding: 0.1rem 0.95rem;
+  color: var(--brand-gray);
+  font-weight: 400;
+}
+
+.bubble-assistant table {
+  border-collapse: collapse;
+  margin: 0.6rem 0;
+  font-size: 0.88rem;
+}
+.bubble-assistant th,
+.bubble-assistant td {
+  border: 1px solid var(--brand-border);
+  padding: 0.4rem 0.65rem;
+  text-align: left;
+  font-weight: 400;
+}
+.bubble-assistant th {
+  background: var(--brand-surface);
+  color: var(--brand-black);
+  font-weight: 600;
+}
+
+.bubble-assistant code {
+  background: var(--brand-surface);
+  color: var(--brand-black);
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.85em;
+}
+
+.bubble-assistant pre {
+  background: var(--brand-black);
+  color: #f5f5f5;
+  padding: 0.8rem 1rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin: 0.65rem 0;
+}
+
+.bubble-assistant pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-size: inherit;
+  border-radius: 0;
+}
+
+/* -------------------------------------------------------------
+   Tool call cards — white surface with neutral border.
+   ------------------------------------------------------------- */
+.tool-card {
+  max-width: 46rem;
+  margin-top: 0.25rem;
+  border: 1px solid var(--brand-border);
+  border-radius: 8px;
+  background: #ffffff;
+  font-size: 0.85rem;
+  overflow: hidden;
+}
+
+.tool-card summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.6rem 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--brand-gray);
+  font-weight: 400;
+}
+
+.tool-card summary::-webkit-details-marker {
+  display: none;
+}
+
+.tool-card summary::before {
+  content: "▸";
+  font-size: 0.7rem;
+  color: var(--brand-gray);
+  transition: transform 0.15s;
+}
+
+.tool-card[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.tool-card .tool-name {
+  color: var(--brand-black);
+  font-weight: 600;
+}
+
+.tool-card .tool-body {
+  padding: 0 0.95rem 0.95rem;
+}
+
+.tool-card pre {
+  background: var(--brand-black);
+  color: #f5f5f5;
+  padding: 0.75rem 0.95rem;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  max-height: 20rem;
+  overflow-y: auto;
+  margin: 0;
+}
+
+/* Errors use brand black text on white; no orange border. */
+.tool-card.error {
+  border-color: var(--brand-border-strong);
+}
+.tool-card.error summary {
+  color: var(--brand-black);
+}
+
+/* -------------------------------------------------------------
+   Sidebar repo cards — cards are white, sit on the white sidebar
+   with a soft border to create hierarchy.
+   ------------------------------------------------------------- */
+.skill-card {
+  border-radius: 6px;
+  border: 1px solid var(--brand-border);
+  background: #ffffff;
+  padding: 0.7rem 0.85rem;
+}
+
+.skill-card .skill-name {
+  font-weight: 600;
+  color: var(--brand-black);
+  font-size: 0.875rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.skill-card .skill-desc {
+  margin-top: 0.25rem;
+  font-weight: 400;
+  color: var(--brand-gray);
+  font-size: 0.75rem;
+  line-height: 1.45;
+}
+
+.repo-head {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-weight: 500;
+  font-size: 0.7rem;
+  color: var(--brand-gray);
+  background: var(--brand-surface);
+  border: 1px solid var(--brand-border);
+  border-radius: 4px;
+  padding: 0.05rem 0.35rem;
+}
+
+.repo-head-pending {
+  color: var(--brand-orange);
+  border-color: rgba(251, 110, 0, 0.25);
+}
+
+/* -------------------------------------------------------------
+   Answer-mode toggle — segmented control above the input.
+   ------------------------------------------------------------- */
+.mode-toggle {
+  display: inline-flex;
+  border: 1px solid var(--brand-border);
+  border-radius: 6px;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+.mode-btn {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--brand-gray);
+  background: #ffffff;
+  border: 0;
+  border-right: 1px solid var(--brand-border);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.mode-btn:last-child {
+  border-right: 0;
+}
+
+.mode-btn:hover:not(.active) {
+  background: var(--brand-surface);
+  color: var(--brand-black);
+}
+
+.mode-btn.active {
+  background: var(--brand-black);
+  color: #ffffff;
+}
+
+/* Model selector dropdown — native <select> styled to match chips. */
+.model-select {
+  appearance: none;
+  -webkit-appearance: none;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--brand-black);
+  background-color: #ffffff;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23646265' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.55rem center;
+  background-size: 0.85rem 0.85rem;
+  border: 1px solid var(--brand-border);
+  border-radius: 6px;
+  padding: 0.32rem 1.85rem 0.32rem 0.7rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.model-select:hover {
+  border-color: var(--brand-border-strong);
+  background-color: var(--brand-surface);
+}
+
+.model-select:focus {
+  outline: none;
+  border-color: rgba(35, 31, 32, 0.4);
+}
+
+/* API-key sidebar — "configured" card. */
+.api-key-card {
+  border: 1px solid var(--brand-border);
+  background: var(--brand-surface);
+  border-radius: 6px;
+  padding: 0.55rem 0.7rem;
+}
+
+.api-key-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--brand-black);
+}
+
+.api-key-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 50%;
+  background: var(--brand-orange);
+  box-shadow: 0 0 0 3px rgba(251, 110, 0, 0.15);
+  flex: 0 0 auto;
+}
+
+.api-key-preview {
+  margin-top: 0.35rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.72rem;
+  color: var(--brand-gray);
+  word-break: break-all;
+}
+
+/* -------------------------------------------------------------
+   Template chips — pill feel but bounded to 8px radius.
+   ------------------------------------------------------------- */
+.chip {
+  border-radius: 6px;
+  border: 1px solid var(--brand-border);
+  background: #ffffff;
+  color: var(--brand-black);
+  padding: 0.4rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 400;
+  transition: border-color 0.15s ease, background 0.15s ease;
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--brand-border-strong);
+  background: var(--brand-surface);
+}
+
+/* -------------------------------------------------------------
+   Attach button + file chips for user-uploaded context files.
+   ------------------------------------------------------------- */
+.attach-btn {
+  flex: 0 0 auto;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 8px;
+  border: 1px solid var(--brand-border);
+  background: #ffffff;
+  color: var(--brand-gray);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+
+.attach-btn:hover:not(:disabled) {
+  border-color: var(--brand-border-strong);
+  color: var(--brand-black);
+  background: var(--brand-surface);
+}
+
+.attach-btn svg {
+  width: 1.15rem;
+  height: 1.15rem;
+}
+
+.attach-btn.busy {
+  color: var(--brand-orange);
+  border-color: rgba(251, 110, 0, 0.35);
+}
+
+#attached-files.flex {
+  display: flex;
+}
+
+.file-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 6px;
+  border: 1px solid var(--brand-border);
+  background: var(--brand-surface);
+  padding: 0.25rem 0.35rem 0.25rem 0.6rem;
+  font-size: 0.78rem;
+  color: var(--brand-black);
+}
+
+.file-chip-name {
+  font-weight: 500;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-chip-size {
+  color: var(--brand-gray);
+  font-weight: 400;
+  font-size: 0.7rem;
+}
+
+.file-chip-remove {
+  border: 0;
+  background: transparent;
+  color: var(--brand-gray);
+  cursor: pointer;
+  padding: 0 0.3rem;
+  font-size: 0.95rem;
+  line-height: 1;
+  border-radius: 3px;
+}
+
+.file-chip-remove:hover {
+  background: var(--brand-border);
+  color: var(--brand-black);
+}
+
+/* -------------------------------------------------------------
+   Status / loading dot
+   ------------------------------------------------------------- */
+.typing {
+  display: inline-block;
+  width: 0.35rem;
+  height: 0.35rem;
+  border-radius: 50%;
+  background: var(--brand-gray);
+  margin-left: 0.25rem;
+  animation: pulse 1.1s infinite;
+}
+
+@keyframes pulse {
+  0%,
+  80%,
+  100% {
+    opacity: 0.2;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+textarea#input {
+  max-height: 14rem;
+}
+
+/* Selection inherits brand black for consistency */
+::selection {
+  background: rgba(35, 31, 32, 0.12);
+  color: var(--brand-black);
+}
