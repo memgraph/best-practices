@@ -76,6 +76,8 @@ Deploy Memgraph using methods that suit your environment, whether it's container
 - [Explain and profile of the query](./querying/explain_profile/)
 - [Path traversals tutorial](./querying/path_traversals/)
 
+### Tableau
+- [Connect Memgraph with Tableau](./tableau_integration/)
 
 ### Time-to-live
 - [Node TTL demo](./ttl/node_ttl_demo/)
