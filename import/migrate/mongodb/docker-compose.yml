@@ -1,0 +1,28 @@
+services:
+  mongo:
+    image: mongo:6
+    restart: unless-stopped
+    ports: 
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+    command: ["--auth"]
+    volumes:
+      - mongo_data:/data/db
+
+  memgraph:
+    image: memgraph/memgraph-mage:custom
+    container_name: memgraph
+    ports:
+      - "7687:7687"
+    volumes:
+      - memgraph_data:/var/lib/memgraph
+      - memgraph_logs:/var/log/memgraph
+    command: [--log-level=TRACE, --also-log-to-stderr=true, --query-execution-timeout-sec=0]
+
+
+volumes:
+  mongo_data:
+  memgraph_data:
+  memgraph_logs:
