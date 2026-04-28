@@ -1,0 +1,13 @@
+services:
+  memgraph:
+    image: memgraph/memgraph-mage:3.9.0
+    container_name: iceberg-memgraph
+    ports:
+      - "7687:7687"
+      - "7444:7444"
+    command:
+      - "--log-level=TRACE"
+      - "--also-log-to-stderr=true"
+      - "--query-execution-timeout-sec=0"
+      - "--storage-snapshot-interval-sec=0"
+      - "--storage-wal-enabled=false"

@@ -1,0 +1,12 @@
+[project]
+name = "iceberg-to-memgraph"
+version = "0.1.0"
+description = "Load Apache Iceberg tables into Memgraph as a property graph."
+requires-python = ">=3.10"
+dependencies = [
+    "pyiceberg[sql-sqlite,pyarrow]>=0.7.0",
+    "pyarrow>=14.0.0",
+    "numpy>=1.26.0",
+    "neo4j>=5.0.0",
+    "duckdb>=0.10.0",
+]
