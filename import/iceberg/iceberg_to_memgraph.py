@@ -5,8 +5,8 @@ read side differs — the writer below is identical for every backend.
 
 Use --workers N to fan out N parallel Bolt writer processes. The single
 reader feeds a multiprocessing queue; each worker process drains it via
-its own driver/session. Memgraph runs in analytical mode (set in
-prepare_graph), so concurrent writes don't conflict.
+its own gqlalchemy Memgraph connection. Memgraph runs in analytical mode
+(set in prepare_graph), so concurrent writes don't conflict.
 
 The reported elapsed time covers the source -> Memgraph ingestion only:
 schema setup and graph reset are excluded so the number reflects actual
@@ -16,8 +16,9 @@ import argparse
 import multiprocessing as mp
 import time
 from typing import Iterable
+from urllib.parse import urlparse
 
-from neo4j import Driver, GraphDatabase, Session
+from gqlalchemy import Memgraph
 
 from loaders import available_sources, get_loader
 from loaders.base import Loader
@@ -47,40 +48,47 @@ CREATE (a)-[:SENT {tx_id: r.tx_id, amount: r.amount, ts: r.timestamp}]->(b)
 _SHUTDOWN = "__SHUTDOWN__"  # string sentinel survives pickling across processes
 
 
-def prepare_graph(session: Session) -> None:
+def _parse_uri(uri: str) -> tuple[str, int]:
+    parsed = urlparse(uri)
+    return parsed.hostname or "localhost", parsed.port or 7687
+
+
+def prepare_graph(db: Memgraph) -> None:
     """Pre-ingestion setup: switch to analytical mode for fast bulk writes,
     wipe the graph (DROP GRAPH also clears schema/indexes), then create
     the label and label-property indexes used by the loader."""
-    session.run("STORAGE MODE IN_MEMORY_ANALYTICAL")
-    session.run("DROP GRAPH")
-    session.run("CREATE INDEX ON :User")
-    session.run("CREATE INDEX ON :User(id)")
+    db.execute("STORAGE MODE IN_MEMORY_ANALYTICAL")
+    db.execute("DROP GRAPH")
+    db.execute("CREATE INDEX ON :User")
+    db.execute("CREATE INDEX ON :User(id)")
 
 
 def write_serial(
-    session: Session, label: str, query: str, batches: Iterable[list[dict]]
+    db: Memgraph, label: str, query: str, batches: Iterable[list[dict]]
 ) -> None:
     for i, batch in enumerate(batches, start=1):
-        session.run(query, rows=batch)
+        db.execute(query, parameters={"rows": batch})
         print(f"[{label}] batch {i} ({len(batch)} rows) done")
 
 
-def _writer_process(uri: str, label: str, query: str, q: "mp.Queue") -> None:
-    """Worker entry point. Each process owns its driver — the neo4j driver
-    isn't safe to share across forked processes."""
+def _writer_process(
+    host: str, port: int, label: str, query: str, q: "mp.Queue"
+) -> None:
+    """Worker entry point. Each process owns its Memgraph connection — Bolt
+    sockets aren't safe to share across forked processes."""
     name = mp.current_process().name
-    with GraphDatabase.driver(uri, auth=("", "")) as driver:
-        with driver.session() as session:
-            while True:
-                item = q.get()
-                if item == _SHUTDOWN:
-                    return
-                session.run(query, rows=item)
-                print(f"[{label}] {name} finished batch ({len(item)} rows)")
+    db = Memgraph(host=host, port=port)
+    while True:
+        item = q.get()
+        if item == _SHUTDOWN:
+            return
+        db.execute(query, parameters={"rows": item})
+        print(f"[{label}] {name} finished batch ({len(item)} rows)")
 
 
 def write_parallel(
-    uri: str,
+    host: str,
+    port: int,
     label: str,
     query: str,
     batches: Iterable[list[dict]],
@@ -88,12 +96,12 @@ def write_parallel(
 ) -> None:
     """Producer-consumer: the main process reads from the loader and pushes
     batches onto a multiprocessing queue; n_workers writer processes pull
-    and run UNWIND/MERGE on their own Bolt sessions."""
+    and run UNWIND/MERGE on their own Memgraph connections."""
     q: "mp.Queue" = mp.Queue(maxsize=n_workers * 4)
     procs = [
         mp.Process(
             target=_writer_process,
-            args=(uri, label, query, q),
+            args=(host, port, label, query, q),
             name=f"writer-{label}-{i}",
         )
         for i in range(n_workers)
@@ -111,8 +119,9 @@ def write_parallel(
 
 
 def ingest(
-    driver: Driver,
-    uri: str,
+    db: Memgraph,
+    host: str,
+    port: int,
     loader: Loader,
     n_workers: int,
     user_query: str,
@@ -121,13 +130,12 @@ def ingest(
     start = time.perf_counter()
 
     if n_workers <= 1:
-        with driver.session() as session:
-            write_serial(session, "users", user_query, loader.users())
-            write_serial(session, "tx", TX_BATCH_QUERY, loader.transactions())
+        write_serial(db, "users", user_query, loader.users())
+        write_serial(db, "tx", TX_BATCH_QUERY, loader.transactions())
     else:
         # Users must finish before transactions: the tx batch MATCHes them.
-        write_parallel(uri, "users", user_query, loader.users(), n_workers)
-        write_parallel(uri, "tx", TX_BATCH_QUERY, loader.transactions(), n_workers)
+        write_parallel(host, port, "users", user_query, loader.users(), n_workers)
+        write_parallel(host, port, "tx", TX_BATCH_QUERY, loader.transactions(), n_workers)
 
     return time.perf_counter() - start
 
@@ -197,12 +205,12 @@ def main() -> None:
         )
         return
 
-    with GraphDatabase.driver(args.uri, auth=("", "")) as driver:
-        with driver.session() as session:
-            prepare_graph(session)
-        elapsed = ingest(
-            driver, args.uri, loader, args.workers, USER_QUERIES[args.user_write]
-        )
+    host, port = _parse_uri(args.uri)
+    db = Memgraph(host=host, port=port)
+    prepare_graph(db)
+    elapsed = ingest(
+        db, host, port, loader, args.workers, USER_QUERIES[args.user_write]
+    )
 
     print(
         f"[{args.source}, workers={args.workers}, batch={args.batch_size}, "

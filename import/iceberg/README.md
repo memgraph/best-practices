@@ -9,13 +9,24 @@ Ingest data from [Apache Iceberg](https://iceberg.apache.org/) tables into Memgr
 ## What this example does
 
 1. [`generate_iceberg.py`](./generate_iceberg.py) generates **1,000,000 users** and **5,000,000 transactions** with numpy and writes them to a local Iceberg warehouse via a PyIceberg `SqlCatalog` (SQLite metadata, local-filesystem warehouse). Zero infra. Sizes are configurable via `--users` / `--transactions`.
-2. [`iceberg_to_memgraph.py`](./iceberg_to_memgraph.py) reads those Iceberg tables and writes them to Memgraph as `(:User)-[:SENT]->(:User)` using batched `UNWIND ... MERGE` over the Bolt protocol.
+2. [`iceberg_to_memgraph.py`](./iceberg_to_memgraph.py) reads those Iceberg tables and writes them to Memgraph as `(:User)-[:SENT]->(:User)` using batched `UNWIND` queries via [gqlalchemy](https://github.com/memgraph/gqlalchemy) (Memgraph's Python client, built on `pymgclient`).
 
 The reported elapsed time covers only the source → Memgraph ingestion (schema setup and graph reset are excluded), so the number reflects actual data movement.
 
 ## Why a local Iceberg catalog?
 
 In production, Iceberg tables live in a data lake (S3 + AWS Glue / REST / Hive catalog). The local SQL catalog used here is a reproducible stand-in so the example runs end-to-end on a fresh clone — only the catalog config block in [`loaders/pyiceberg_loader.py`](./loaders/pyiceberg_loader.py) changes when you point at a real lake.
+
+## Why gqlalchemy and not the official `neo4j` driver?
+
+**Use [gqlalchemy](https://github.com/memgraph/gqlalchemy) when writing to Memgraph.** In our tests on this workload (1M users + 5M transactions, batched UNWIND), gqlalchemy delivered **at least a 2× ingestion throughput improvement** over the `neo4j` Python driver at the same `--workers` and `--batch-size`.
+
+Why: gqlalchemy talks to Memgraph through [`pymgclient`](https://github.com/memgraph/pymgclient), a native C client built specifically for Memgraph's Bolt implementation. The `neo4j` driver is generic Bolt and adds per-call overhead (transactional bookmarking, server-routing checks, result-buffering) that bulk loads pay for on every batch but don't benefit from. For write-heavy ingestion via `UNWIND`, that overhead dominates.
+
+Rule of thumb for this repo:
+- **Writing to Memgraph** (ingest, ETL, bulk load): use gqlalchemy.
+- **Read-mostly app code** where you want OGM ergonomics (Python classes ↔ nodes, query builder): also gqlalchemy.
+- **Cross-vendor code that must run against Neo4j too**: use the `neo4j` driver.
 
 ## Run
 
@@ -70,8 +81,9 @@ uv run python iceberg_to_memgraph.py --source pyiceberg --workers 8 --batch-size
 Expected output:
 
 ```
-[pyiceberg, workers=1, batch=10000] Ingested into Memgraph in 142.37s
-[duckdb,    workers=8, batch=10000] Ingested into Memgraph in  31.04s
+[pyiceberg, workers=1,  batch=10000, user-write=create] Ingested into Memgraph in 142.37s
+[duckdb,    workers=8,  batch=10000, user-write=create] Ingested into Memgraph in  31.04s
+[pyiceberg, workers=20, batch=25000, user-write=create] Ingested into Memgraph in  24.34s
 ```
 
 Flags:
