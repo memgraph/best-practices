@@ -7,9 +7,9 @@ Memgraph: variable-length pattern via gqlalchemy.
 Both queries count the distinct users reachable in exactly N hops from a starting user.
 
 Usage:
-    uv run python pokec_graph_example/benchmark.py
-    uv run python pokec_graph_example/benchmark.py --load-memgraph   # copy data PG -> MG first
-    uv run python pokec_graph_example/benchmark.py --start-id 40692 --iterations 5 --max-hops 5
+    ./load.sh                            # one-time: load both engines
+    uv run python benchmark.py
+    uv run python benchmark.py --start-id 40692 --iterations 5 --max-hops 5
 """
 
 from __future__ import annotations
@@ -189,85 +189,6 @@ def benchmark_memgraph(start_id: int, max_hops: int, iterations: int) -> dict:
     return results
 
 
-def load_memgraph_from_postgres(batch_size: int = 50_000) -> None:
-    """Copy users + friendships from Postgres into Memgraph."""
-    db = Memgraph(host=MG_HOST, port=MG_PORT)
-
-    print(">>> wiping Memgraph and creating indexes")
-    db.execute("STORAGE MODE IN_MEMORY_ANALYTICAL;")
-    db.execute("DROP GRAPH;")
-    db.execute(f"CREATE INDEX ON :{PERSON_LABEL};")
-    db.execute(f"CREATE INDEX ON :{PERSON_LABEL}(id);")
-
-    # If the Postgres cluster was initdb'd as SQL_ASCII, psycopg returns text
-    # columns as `bytes`, which the Bolt driver refuses as a query parameter.
-    # Force UTF-8 on the client side so `gender` always comes back as `str`.
-    with psycopg.connect(PG_DSN, client_encoding="UTF8") as conn:
-        with conn.cursor(name="users_cursor") as cur:
-            cur.itersize = batch_size
-            cur.execute("SELECT id, completion_percentage, gender, age FROM users;")
-            batch: list[dict] = []
-            total = 0
-            for row in cur:
-                batch.append(
-                    {
-                        "id": row[0],
-                        "completion_percentage": row[1],
-                        "gender": row[2],
-                        "age": row[3],
-                    }
-                )
-                if len(batch) >= batch_size:
-                    db.execute(
-                        f"UNWIND $rows AS r CREATE (:{PERSON_LABEL} {{id: r.id, "
-                        f"completion_percentage: r.completion_percentage, "
-                        f"gender: r.gender, age: r.age}});",
-                        {"rows": batch},
-                    )
-                    total += len(batch)
-                    print(f"    users: {total}")
-                    batch.clear()
-            if batch:
-                db.execute(
-                    f"UNWIND $rows AS r CREATE (:{PERSON_LABEL} {{id: r.id, "
-                    f"completion_percentage: r.completion_percentage, "
-                    f"gender: r.gender, age: r.age}});",
-                    {"rows": batch},
-                )
-                total += len(batch)
-                print(f"    users: {total} (final)")
-
-        with conn.cursor(name="edges_cursor") as cur:
-            cur.itersize = batch_size
-            cur.execute("SELECT user_id, friend_id FROM friendships;")
-            batch = []
-            total = 0
-            for row in cur:
-                batch.append({"u": row[0], "f": row[1]})
-                if len(batch) >= batch_size:
-                    db.execute(
-                        f"UNWIND $rows AS r "
-                        f"MATCH (a:{PERSON_LABEL} {{id: r.u}}), (b:{PERSON_LABEL} {{id: r.f}}) "
-                        f"CREATE (a)-[:{FRIEND_REL}]->(b);",
-                        {"rows": batch},
-                    )
-                    total += len(batch)
-                    print(f"    edges: {total}")
-                    batch.clear()
-            if batch:
-                db.execute(
-                    f"UNWIND $rows AS r "
-                    f"MATCH (a:{PERSON_LABEL} {{id: r.u}}), (b:{PERSON_LABEL} {{id: r.f}}) "
-                    f"CREATE (a)-[:{FRIEND_REL}]->(b);",
-                    {"rows": batch},
-                )
-                total += len(batch)
-                print(f"    edges: {total} (final)")
-
-    db.execute("STORAGE MODE IN_MEMORY_TRANSACTIONAL;")
-    print(">>> load done")
-
-
 def fmt_time(times: list[float], timed_out: bool = False) -> str:
     if not times:
         return "TIMEOUT" if timed_out else "n/a"
@@ -346,8 +267,6 @@ def main() -> None:
     parser.add_argument("--start-id", type=int, default=40692)
     parser.add_argument("--max-hops", type=int, default=5)
     parser.add_argument("--iterations", type=int, default=5)
-    parser.add_argument("--load-memgraph", action="store_true",
-                        help="Copy users + friendships from Postgres into Memgraph first.")
     parser.add_argument("--skip-postgres", action="store_true")
     parser.add_argument("--skip-memgraph", action="store_true")
     parser.add_argument(
@@ -360,9 +279,6 @@ def main() -> None:
 
     if not (1 <= args.max_hops <= MAX_SUPPORTED_HOPS):
         parser.error(f"--max-hops must be between 1 and {MAX_SUPPORTED_HOPS}")
-
-    if args.load_memgraph:
-        load_memgraph_from_postgres()
 
     pg_results: dict = {}
     mg_results: dict = {}
