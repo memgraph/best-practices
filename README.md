@@ -57,6 +57,7 @@ Deploy Memgraph using methods that suit your environment, whether it's container
 
 ### Import
 - [PySpark integration (CSV -> PySpark -> Memgraph)](./pyspark_integration/)
+- [Importing data from Apache Iceberg (PyIceberg)](./import/iceberg/)
 - [Importing data from Arrow Flight](./import/migrate/arrow-flight/)
 - [Importing data with DuckDB](./import/migrate/duckdb/)
 - [Importing data from Amazon Aurora/MySQL](./import/migrate/amazon_aurora/)
