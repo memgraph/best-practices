@@ -1,0 +1,14 @@
+target/
+*.class
+HELP.md
+.mvn/
+!**/src/main/**/target/
+!**/src/test/**/target/
+
+### IDE ###
+.idea/
+*.iml
+.vscode/
+.settings/
+.project
+.classpath

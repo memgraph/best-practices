@@ -66,6 +66,7 @@ Deploy Memgraph using methods that suit your environment, whether it's container
 
 ### Java
 - [Simple Java app with ingestion and querying](./java/querying/)
+- [Spring Boot with Spring Data Neo4j as a drop-in replacement](./java/spring_boot_memgraph/)
 
 ### Schema Migration
 - [Schema migrations with Liquibase and Memgraph](./schema_migration/liquibase/)
