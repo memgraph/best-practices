@@ -1,0 +1,22 @@
+// Queries executed by connect.py, in order.
+//
+// Two kinds of connections are used:
+//   [coordinator/bolt]    plain  bolt://localhost:7691  -> runs ON the coordinator
+//   [coordinator/routing] neo4j://localhost:7691        -> routed to the current MAIN
+//   [replica/bolt]        plain  bolt://localhost:7688  -> runs directly on a REPLICA
+
+// 1) [coordinator/bolt] Inspect the cluster; expect 6 instances
+//    (3 coordinators + 3 data instances).
+SHOW INSTANCES;
+
+// 2) [coordinator/routing] Write a node; routed to the current MAIN.
+CREATE (n:HACheck {name: 'connect.py'});
+
+// 3) [replica/bolt] Assert the node replicated to the REPLICA (expect 1).
+MATCH (n:HACheck) RETURN count(n) AS c;
+
+// 4) [coordinator/routing] Delete the node; routed to the current MAIN.
+MATCH (n:HACheck) DELETE n;
+
+// 5) [replica/bolt] Assert the REPLICA is empty again (expect 0).
+MATCH (n:HACheck) RETURN count(n) AS c;
