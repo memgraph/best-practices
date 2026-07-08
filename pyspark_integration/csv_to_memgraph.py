@@ -44,11 +44,18 @@ def get_driver():
     return GraphDatabase.driver(MG_URI, auth=("", ""))
 
 
-def clear_memgraph(driver) -> None:
-    """Delete all nodes and edges in Memgraph."""
+def set_analytical_mode(driver) -> None:
+    """Switch Memgraph to IN_MEMORY_ANALYTICAL storage mode."""
     with driver.session() as session:
-        session.run("MATCH (n) DETACH DELETE n")
-    print("Cleared existing data.")
+        session.run("STORAGE MODE IN_MEMORY_ANALYTICAL")
+    print("Storage mode set to IN_MEMORY_ANALYTICAL.")
+
+
+def clear_memgraph(driver) -> None:
+    """Drop all nodes, edges, indexes, and constraints in Memgraph."""
+    with driver.session() as session:
+        session.run("DROP GRAPH")
+    print("Dropped graph.")
 
 
 def create_indexes(driver) -> None:
@@ -61,12 +68,16 @@ def create_indexes(driver) -> None:
 
 
 def write_nodes(spark, csv_path: str) -> None:
-    """Read nodes CSV and write to Memgraph, one label at a time."""
+    """Read nodes CSV and write to Memgraph, one label at a time, in parallel."""
     nodes_df = spark.read.csv(csv_path, header=True, inferSchema=True)
     total = nodes_df.count()
     print(f"Read {total} nodes from {csv_path}")
 
-    for label in ["Person", "Company", "Product"]:
+    num_partitions = spark.sparkContext.defaultParallelism
+    nodes_df = nodes_df.repartition(num_partitions)
+    nodes_df.cache()
+
+    def write_label(label: str) -> str:
         label_df = nodes_df.filter(nodes_df.label == label).drop("label")
         count = label_df.count()
 
@@ -79,7 +90,15 @@ def write_nodes(spark, csv_path: str) -> None:
             .option("node.keys", "id")
             .save()
         )
-        print(f"  {label}: {count} nodes")
+        return f"  {label}: {count} nodes"
+
+    labels = ["Person", "Company", "Product"]
+    with ThreadPoolExecutor(max_workers=len(labels)) as pool:
+        futures = {pool.submit(write_label, label): label for label in labels}
+        for future in as_completed(futures):
+            print(future.result())
+
+    nodes_df.unpersist()
 
 
 def write_edges(spark, nodes_csv_path: str, edges_csv_path: str) -> None:
@@ -105,6 +124,9 @@ def write_edges(spark, nodes_csv_path: str, edges_csv_path: str) -> None:
         .join(tgt_nodes, edges_df.target == tgt_nodes.tgt_id)
         .drop("src_id", "tgt_id")
     )
+
+    num_partitions = spark.sparkContext.defaultParallelism
+    enriched = enriched.repartition(num_partitions)
 
     # Write per (src_label, tgt_label) combo since the connector requires labels
     combos = enriched.select("src_label", "tgt_label").distinct().collect()
@@ -168,6 +190,7 @@ def main() -> None:
     spark = get_spark()
     driver = get_driver()
 
+    set_analytical_mode(driver)
     clear_memgraph(driver)
     create_indexes(driver)
 
